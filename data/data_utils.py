@@ -108,7 +108,7 @@ def main():
         # print(pd.read_csv(PATH_FEATURES_AND_LABELS, index_col=[0]).shape)
 
         # Generate graph links for graph-based algorithms
-        # link_patient_wards_to_caregivers()  # long step!!
+        link_patient_wards_to_caregivers()  # (14_618_862 x 10)
         generate_caregiver_links()  # (672656 x 2); approx. 3 minutes
         generate_ward_links()  # (184272 x 2); approx. 5 minutes
         merge_ward_and_caregiver_links()  # (1674559 x 2), i.e., [src, dest]
@@ -221,7 +221,7 @@ def handle_missing_data():
     df_final.OUTTIME.fillna(df_final.DISCHTIME, inplace=True)
     df_final.COLONISED_DATE.fillna(df_final.CHARTDATE, inplace=True)
     
-    # Set idle values back to non-colonised patients as they were modified before (what???)
+    # Set back idle values for non-colonised patients as they were modified (what???)
     df_final.loc[
         (df_final.COLONISED_DATE < df_final.INTIME) |
         (df_final.COLONISED_DATE > df_final.OUTTIME), 'COLONISED'] = int(0)
@@ -249,25 +249,25 @@ def add_colonisation_pressure_to_data():
     print('Adding colonisation pressure to the patient data')
     # Load already existing data
     df_data = pd.read_csv(PATH_COLUMNS_AND_LABELS, index_col=[0])
-    for patient in tqdm(list(df_data.itertuples()),
+    for pw in tqdm(list(df_data.itertuples()),
                         desc='Computing colonisation pressure'):
         
-        # Identify patients that were in the same room at the same time
-        others = df_data.loc[
-            (df_data['SUBJECT_ID'] != patient.SUBJECT_ID) &
-            (df_data['HADM_ID'] != patient.HADM_ID)]
-        others = others.loc[others['CURR_WARDID'] == patient.CURR_WARDID]
-        others = others.loc[
-            ((others['INTIME'] > patient.INTIME) & (others['INTIME'] < patient.OUTTIME)) |
-            ((others['OUTTIME'] > patient.INTIME) & (others['OUTTIME'] < patient.OUTTIME))]
+        # Identify patient-wards that that occured at the same time
+        pws = df_data.loc[
+            (df_data['SUBJECT_ID'] != pw.SUBJECT_ID) &
+            (df_data['HADM_ID'] != pw.HADM_ID)]
+        pws = pws.loc[pws['CURR_WARDID'] == pw.CURR_WARDID]
+        pws = pws.loc[
+            ((pws['INTIME'] > pw.INTIME) & (pws['INTIME'] < pw.OUTTIME)) |
+            ((pws['OUTTIME'] > pw.INTIME) & (pws['OUTTIME'] < pw.OUTTIME))]
         
-        # Compute colonisation pressure and this information to the patient data
-        n_contacts = len(others.SUBJECT_ID.unique())
-        n_colonised = len(others.loc[others['COLONISED'] == 1].SUBJECT_ID.unique())
-        colonisation_pressure = n_colonised / n_contacts if n_contacts > 0 else 0
-        df_data.at[patient[0], 'N_CONTACTS'] = n_contacts  # very inefficient???
-        df_data.at[patient[0], 'N_COLONISED'] = n_colonised  # very inefficient???
-        df_data.at[patient[0], 'CP'] = colonisation_pressure  # very inefficient???
+        # Compute colonisation pressure and add features to patient-wards data
+        n_contacts = len(pws.SUBJECT_ID.unique())
+        n_colonised = len(pws.loc[pws['COLONISED'] == 1].SUBJECT_ID.unique())
+        col_pressure = n_colonised / n_contacts if n_contacts > 0 else 0
+        df_data.at[pw[0], 'N_CONTACTS'] = n_contacts  # very inefficient??? here append, then set all in a column
+        df_data.at[pw[0], 'N_COLONISED'] = n_colonised  # very inefficient??? here append, then set all in a column
+        df_data.at[pw[0], 'CP'] = col_pressure  # very inefficient??? here append, then set all in a column
     
     # Save updated dataset
     df_data = df_data.drop_duplicates()
@@ -279,8 +279,8 @@ def add_losh_to_data():
     """
     print('Adding hospital length-of-stay to the patient data')
     df_data = pd.read_csv(PATH_COLUMNS_AND_LABELS, index_col=[0])
-    df_data['DISCHTIME'] = pd.to_datetime(df_data['DISCHTIME'])
-    df_data['ADMITTIME'] = pd.to_datetime(df_data['ADMITTIME'])
+    df_data['DISCHTIME'] = pd.to_datetime(df_data['DISCHTIME'])  # what????? should not modify df
+    df_data['ADMITTIME'] = pd.to_datetime(df_data['ADMITTIME'])  # what????? should not modify df
     df_data['LOSH'] = df_data['DISCHTIME'] - df_data['ADMITTIME']
     df_data['LOSH'] = df_data['LOSH'] / np.timedelta64(1, 'D')
     df_data = df_data.drop_duplicates()
@@ -302,8 +302,6 @@ def link_patient_wards_to_caregivers():
     """
     print('Linking caregivers to patient-wards')
     # Load caregiver data
-    import time
-    t0 = time.time()
     df_caregivers = pd.read_csv(PATH_CHART_EVENTS, usecols=CHARTEVENT_COLUMNS) # takes approx. 8 minutes (330_712_483 x 7)
     df_caregivers['CHARTTIME'] = pd.to_datetime(df_caregivers['CHARTTIME'])
     df_caregivers['day'] = df_caregivers['CHARTTIME'].dt.day
@@ -316,32 +314,23 @@ def link_patient_wards_to_caregivers():
     df_wards['OUTTIME'] = pd.to_datetime(df_wards['OUTTIME'])
 
     # Link caregivers to patient-wards
-    t1 = time.time()
-    print(t1 - t0, df_caregivers.shape, df_wards.shape)
     df_final = pd.merge(df_caregivers, df_wards, how='left',
-                        left_on=ADMISSION_COLUMNS, 
+                        left_on=ADMISSION_COLUMNS,  # not sure about how all these merges are done
                         right_on=ADMISSION_COLUMNS)  # takes approx 1.8 hours (1_664_662_896 x 10)
-    t2 = time.time()
-    print(t2 - t1, df_final.shape)
     df_final = df_final[(df_final['CHARTTIME'] >= df_final['INTIME']) &
-                        (df_final['CHARTTIME'] <= df_final['OUTTIME'])]  # takes approx. 2 hours (329366946 x 10)
-    t3 = time.time()
-    print(t3 - t2, df_final.shape)
-    df_final = df_final.drop_duplicates()  # ????
+                        (df_final['CHARTTIME'] <= df_final['OUTTIME'])]  # takes approx. 2 hours (329_366_946 x 10)
+    df_final = df_final.drop_duplicates()  # takes approx. 30 minutes (14_618_862 x 10)
     df_final.to_csv(PATH_PATIENT_WARD_CAREGIVER_MAPPING, encoding='utf-8')
-    print(time.time() - t3, df_final.shape)
-    exit()
     
 
 def generate_caregiver_links():
-    """ Generate links between patients that had the same caregiver at the same time
+    """ Generate links between patients having the same caregiver simultaneously
     """
     print('Generating graph links using patient-caregiver data')
     # Load patient-ward and caregiver data and merge them in a single dataframe
     df_data = pd.read_csv(PATH_COLUMNS_AND_LABELS, usecols=WARD_COLUMNS)
     df_data['PWARD_ID'] = df_data.index  # to keep track of row ids
-    df_ward_caregiver = pd.read_csv(PATH_PATIENT_WARD_CAREGIVER_MAPPING,
-                                    usecols=CAREGIVER_COLUMNS)
+    df_ward_caregiver = pd.read_csv(PATH_PATIENT_WARD_CAREGIVER_MAPPING, usecols=CAREGIVER_COLUMNS)
     df_patients = pd.merge(df_ward_caregiver, df_data, how='left',  # 18M samples
                            left_on=WARD_COLUMNS, right_on=WARD_COLUMNS)
     
