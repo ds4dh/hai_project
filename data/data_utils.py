@@ -28,9 +28,11 @@ PATH_FEATURES_AND_LABELS = os.path.join(PROCESSED_DATA_DIR, 'patient-ward_featur
 
 # Ouput file paths (links)
 PATH_PATIENT_WARD_CAREGIVER_MAPPING = os.path.join(PROCESSED_DATA_DIR, 'patient-ward_caregiver_mapping.csv')
-PATH_WARD_LINKS = os.path.join(PROCESSED_DATA_DIR, 'graph_links_wards.csv')
-PATH_CAREGIVER_LINKS = os.path.join(PROCESSED_DATA_DIR, 'graph_links_caregivers.csv')
-PATH_ALL_LINKS = os.path.join(PROCESSED_DATA_DIR, 'graph_links_all.csv')
+PATH_LINK_DICT = {
+    'wards': os.path.join(PROCESSED_DATA_DIR, 'graph_links_wards.csv'),
+    'caregivers': os.path.join(PROCESSED_DATA_DIR, 'graph_links_caregivers.csv'),
+    'all': os.path.join(PROCESSED_DATA_DIR, 'graph_links_all.csv'),
+}
 
 # Relevant column names in various data files
 ENTEROBACTERIAE = [
@@ -86,46 +88,30 @@ def main():
     """
     if REGENERATE_DATASET_FROM_SCRATCH:
         # Generate labels and basic features for all patients-wards
-        # generate_patient_colonisation_labels()  # (62580 x 6)
-        # print(pd.read_csv(PATH_COLONISATION_LABELS, index_col=[0]).shape)
-        # generate_patient_wards()  # (261857 x 13)
-        # print(pd.read_csv(PATH_PATIENT_WARDS, index_col=[0]).shape)
-        # generate_diagnose_data()  # (261857 x 15)
-        # print(pd.read_csv(PATH_DIAGNOSE_DATA, index_col=[0]).shape)
+        generate_patient_colonisation_labels()  # (62580 x 6)
+        generate_patient_wards()  # (261_857 x 13)
+        generate_diagnose_data()  # (261_857 x 15)
         
-        # # Generate features for all patients (and keep label in same file)
-        # initialize_data_with_diagnoses_and_labels()  # (281179 x 19)
-        # print(pd.read_csv(PATH_COLUMNS_AND_LABELS, index_col=[0]).shape)
-        # handle_missing_data()  # (274323 x 20)
-        # print(pd.read_csv(PATH_COLUMNS_AND_LABELS, index_col=[0]).shape)
-        # add_gender_to_data()  # (274323 x 21)
-        # print(pd.read_csv(PATH_COLUMNS_AND_LABELS, index_col=[0]).shape)
-        # # add_colonisation_pressure_to_data()  # (274323, 24) -> this step takes long (approx. 4 hours)
-        # # print(pd.read_csv(PATH_COLUMNS_AND_LABELS, index_col=[0]).shape)
-        # add_losh_to_data()  # (274323 x 25)
-        # print(pd.read_csv(PATH_COLUMNS_AND_LABELS, index_col=[0]).shape)
-        # generate_features_and_labels()  # (274323, 12) -> 267100 non-colonised, 7612 colonised (UPDATE THESE NUMBERS)
-        # print(pd.read_csv(PATH_FEATURES_AND_LABELS, index_col=[0]).shape)
-
+        # Generate features for all patients (and keep label in same file)
+        initialize_data_with_diagnoses_and_labels()  # (281_179 x 19)
+        handle_missing_data()  # (274_323 x 20)
+        add_gender_to_data()  # (274_323 x 21)
+        add_colonisation_pressure_to_data()  # (274_323, 24); approx. 4 hours
+        add_losh_to_data()  # (274_323 x 25)
+        generate_features_and_labels()  # (274_323, 12) -> 267_106 non-colonised, 7_617 colonised
+                
         # Generate graph links for graph-based algorithms
-        link_patient_wards_to_caregivers()  # (14_618_862 x 10)
-        generate_caregiver_links()  # (672656 x 2); approx. 3 minutes
-        generate_ward_links()  # (184272 x 2); approx. 5 minutes
-        merge_ward_and_caregiver_links()  # (1674559 x 2), i.e., [src, dest]
-    
+        link_patient_wards_to_caregivers()  # (14_618_862 x 10); approx 4 hours
+        generate_caregiver_links()  # (588_390 x 2); approx. 2 minutes
+        generate_ward_links()  # (184_272 x 2); approx. 3 minutes
+        merge_ward_and_caregiver_links()  # (722_996 x 2), i.e., [src, dest]
+
     # Save sets for balanced and non-balanced (training???) samples
     for balanced in ['non', 'under', 'over']:
-        save_data_set_splits(balanced)
-        load_data(balanced)  # check everything went good
-        # X_train shape: (168758, 26), y_train shape: (168758,)
-        # X_dev shape: (56253, 26), y_dev shape: (56253,)
-        # X_test shape: (56253, 26), y_test shape: (56253,)
-        # X_train shape: (8658, 26), y_train shape: (8658,)
-        # X_dev shape: (2887, 26), y_dev shape: (2887,)
-        # X_test shape: (2887, 26), y_test shape: (2887,)
-        # X_train shape: (328857, 26), y_train shape: (328857,)
-        # X_dev shape: (109619, 26), y_dev shape: (109619,)
-        # X_test shape: (109620, 26), y_test shape: (109620,)
+        save_data_splits(balanced)
+        load_features_and_labels(balanced)  # check everything went good
+    for link_cond in PATH_LINK_DICT.keys():
+        load_edges(link_cond)
 
 
 def generate_patient_colonisation_labels():
@@ -182,7 +168,7 @@ def generate_diagnose_data():
                         right_on=ADMISSION_COLUMNS)
     
     # Encode all possible diagnoses as integers
-    unique_diagnoses = df_final.DIAGNOSIS.unique()
+    unique_diagnoses = df_final['DIAGNOSIS'].unique()
     encoded = LabelEncoder().fit_transform(unique_diagnoses)
     mapping = {d: e for d, e in zip(unique_diagnoses, encoded)}
     df_final['DIAG_ID'] = df_final['DIAGNOSIS'].map(mapping)
@@ -293,8 +279,8 @@ def generate_features_and_labels():
     print('Generating features and label dataset')
     df_data = pd.read_csv(PATH_COLUMNS_AND_LABELS, index_col=[0])
     df_data = df_data.drop_duplicates()
-    df_data = df_data.drop(NON_FEATURE_COLUMNS, axis=1)
-    df_data.to_csv(PATH_FEATURES_AND_LABELS, encoding='utf-8')
+    df_features = df_data.drop(NON_FEATURE_COLUMNS, axis=1)
+    df_features.to_csv(PATH_FEATURES_AND_LABELS, encoding='utf-8')
 
 
 def link_patient_wards_to_caregivers():
@@ -330,7 +316,8 @@ def generate_caregiver_links():
     # Load patient-ward and caregiver data and merge them in a single dataframe
     df_data = pd.read_csv(PATH_COLUMNS_AND_LABELS, usecols=WARD_COLUMNS)
     df_data['PWARD_ID'] = df_data.index  # to keep track of row ids
-    df_ward_caregiver = pd.read_csv(PATH_PATIENT_WARD_CAREGIVER_MAPPING, usecols=CAREGIVER_COLUMNS)
+    df_ward_caregiver = pd.read_csv(PATH_PATIENT_WARD_CAREGIVER_MAPPING,
+                                    usecols=CAREGIVER_COLUMNS)
     df_patients = pd.merge(df_ward_caregiver, df_data, how='left',  # 18M samples
                            left_on=WARD_COLUMNS, right_on=WARD_COLUMNS)
     
@@ -342,25 +329,22 @@ def generate_caregiver_links():
     df_patients = df_patients.drop_duplicates()  # 250k samples -> faster!
     df_grouped = df_patients.groupby(['CHARTDATE', 'CGID'])  # 1 minute
     
-    # Add links between patients visited by the same caregiver on the same day
+    # Add links between patients visited by the same caregiver on the same day    
     links = set()
+    patient_dict = dict(zip(df_data['PWARD_ID'], df_data['HADM_ID']))  # useful?
     for _, group in tqdm(df_grouped, desc='Computing links'):
         src_patient_wards = group['PWARD_ID'].unique().tolist()
         for src_id in src_patient_wards:
             tgt_patient_wards = [i for i in src_patient_wards if i != src_id]
             for tgt_id in tgt_patient_wards:
-                links.add(frozenset([src_id, tgt_id]))  # unordered
-    # patient_ward_ids = df_data['PWARD_ID'].to_list()  # ????????? mais src_id != pward_id non????
-    # admission_ids = df_data['HADM_ID'].to_list()
-    # patient_dict = dict(zip(patient_ward_ids, admission_ids))  # useful?
-                # if patient_dict[src_id] != patient_dict[tgt_id]:  # why check again?????
-            
+                if patient_dict[src_id] != patient_dict[tgt_id]:  # why this????
+                    links.add(frozenset([src_id, tgt_id]))  # unordered
+
     # Generate data file containing caregiver links
-    import pdb; pdb.set_trace()
     link_dict = {'src': [list(link)[0] for link in links],
                  'dst': [list(link)[1] for link in links]}
     df_caregiver_links = pd.DataFrame.from_dict(link_dict)
-    df_caregiver_links.to_csv(PATH_CAREGIVER_LINKS)
+    df_caregiver_links.to_csv(PATH_LINK_DICT['caregivers'])
 
 
 def generate_ward_links():
@@ -386,21 +370,21 @@ def generate_ward_links():
     link_dict = {'src': [list(link)[0] for link in links],
                  'dst': [list(link)[1] for link in links]}
     df_ward_links = pd.DataFrame.from_dict(link_dict)
-    df_ward_links.to_csv(PATH_WARD_LINKS)
+    df_ward_links.to_csv(PATH_LINK_DICT['wards'])
     
 
 def merge_ward_and_caregiver_links():
     """ Merge links coming from having a common ward, and having common caregivers
     """
     print('Generating a new set of links combining in-ward and caregiver links')
-    df_ward_links = pd.read_csv(PATH_WARD_LINKS, index_col=[0])
-    df_caregiver_links = pd.read_csv(PATH_CAREGIVER_LINKS, index_col=[0])
-    df_all = pd.concat([df_ward_links, df_caregiver_links], ignore_index=True)
+    df_ward_links = pd.read_csv(PATH_LINK_DICT['wards'], index_col=[0])
+    df_cg_links = pd.read_csv(PATH_LINK_DICT['caregivers'], index_col=[0])
+    df_all = pd.concat([df_ward_links, df_cg_links], ignore_index=True)
     df_all = df_all.drop_duplicates()
-    df_all.to_csv(PATH_ALL_LINKS)
+    df_all.to_csv(PATH_LINK_DICT['all'])
     
 
-def save_data_set_splits(balanced='non'):
+def save_data_splits(balanced='non'):
     """ Save data set splits from processed dataset file
     """
     print('Saving data set splits using main data file')
@@ -448,7 +432,7 @@ def save_data_set_splits(balanced='non'):
     y_test.to_pickle(os.path.join(balanced_dir, 'y_test.pkl'))
 
 
-def load_data(balanced='non'):
+def load_features_and_labels(balanced='non', include_edges=False):
     """ Get data set splits (separate features and labels)
     """
     print('Loading dataset splits in %s-balanced mode' % balanced)
@@ -457,12 +441,6 @@ def load_data(balanced='non'):
     X_train = pd.read_pickle(os.path.join(balanced_dir, 'X_train.pkl'))
     X_dev = pd.read_pickle(os.path.join(balanced_dir, 'X_dev.pkl'))
     X_test = pd.read_pickle(os.path.join(balanced_dir, 'X_test.pkl'))
-
-    # TEMPORARY UNTIL I GENERATE THE DATASETS AGAIN
-    X_train = X_train.drop(['Number_colonised', 'Number_patients'], axis=1)
-    X_dev = X_dev.drop(['Number_colonised', 'Number_patients'], axis=1)
-    X_test = X_test.drop(['Number_colonised', 'Number_patients'], axis=1)
-    # TEMPORARY UNTIL I GENERATE THE DATASETS AGAIN
 
     # Scale features
     scaler = RobustScaler().fit(X_train)  # pd.DataFrame -> np.ndarray
@@ -476,11 +454,22 @@ def load_data(balanced='non'):
     y_test = pd.read_pickle(os.path.join(balanced_dir, 'y_test.pkl'))
 
     # Return features and labels in separate objects
-    print('Loaded successfully!')
-    print(' - X_train shape: %s, y_train shape: %s' % (X_train.shape, y_train.shape))
-    print(' - X_dev shape: %s, y_dev shape: %s' % (X_dev.shape, y_dev.shape))
-    print(' - X_test shape: %s, y_test shape: %s' % (X_test.shape, y_test.shape))
+    if __name__ == '__main__':
+        print('Loaded features and labels successfully!')
+        print(' - X_train: %s, y_train: %s' % (X_train.shape, y_train.shape))
+        print(' - X_dev: %s, y_dev: %s' % (X_dev.shape, y_dev.shape))
+        print(' - X_test: %s, y_test: %s' % (X_test.shape, y_test.shape))
     return X_train, X_dev, X_test, y_train, y_dev, y_test
+
+
+def load_edges(link_cond):
+    """ Load edges between patient-wards, given {'wards', 'caregivers', 'all'}
+        condition
+    """
+    edges = pd.read_csv(PATH_LINK_DICT[link_cond], index_col=[0])
+    if __name__ == '__main__':
+        print('Loaded graph edges successfully: %s' % edges.shape)
+    return edges
 
 
 if __name__ == '__main__':
