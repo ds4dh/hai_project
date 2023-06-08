@@ -99,7 +99,7 @@ def main():
         add_colonisation_pressure_to_data()  # (274_323, 24); approx. 4 hours
         add_losh_to_data()  # (274_323 x 25)
         generate_features_and_labels()  # (274_323, 12) -> 267_106 non-colonised, 7_617 colonised
-                
+        
         # Generate graph links for graph-based algorithms
         link_patient_wards_to_caregivers()  # (14_618_862 x 10); approx 4 hours
         generate_caregiver_links()  # (588_390 x 2); approx. 2 minutes
@@ -401,74 +401,77 @@ def save_data_splits(balanced='non'):
         df_minor = df_minor.sample(n=len(df_major), replace=True)
         df_data = pd.concat([df_major, df_minor])
     
-    # Separate input features and labels
+    # Separate input features and labels and keep node ids for graph models
     df_y = df_data['COLONISED']
-    df_X = df_data.drop('COLONISED', axis=1)
+    df_X = df_data.drop(['COLONISED'], axis=1)
     
-    # One-hotize features that are strings
+    # One-hotize string features and handle missing numerical values 
     for feat in STRING_FEATURES:
         df_X[feat] = pd.Categorical(df_X[feat])
         one_hot_features = pd.get_dummies(df_X[feat], prefix=feat)
         df_X = pd.concat([df_X, one_hot_features], axis=1)
         df_X = df_X.drop(feat, axis=1)
-
-    # Standardize features that are numerical
-    for feat in NUMERICAL_FEATURES:
-        df_X[feat] = (df_X[feat] - df_X[feat].mean()) / df_X[feat].std()
-    df_X.replace(np.nan, 0, inplace=True)  # fillna????
-
-    # Create data splits
+    df_X.fillna(0, inplace=True)
+    
+    # Create data splits (-> shuffle samples, hence linked node ids and labels)
     balanced_dir = os.path.join(PROCESSED_DATA_DIR, '%s_balanced' % balanced)
     os.makedirs(balanced_dir, exist_ok=True)
     X_train, X_test, y_train, y_test = train_test_split(
         df_X, df_y, test_size=0.2, random_state=2, shuffle=True)
     X_train, X_dev, y_train, y_dev = train_test_split(
         X_train, y_train, test_size=0.25, random_state=2, shuffle=True)
+    
+    # Save features
     X_train.to_pickle(os.path.join(balanced_dir, 'X_train.pkl'))
     X_dev.to_pickle(os.path.join(balanced_dir, 'X_dev.pkl'))
     X_test.to_pickle(os.path.join(balanced_dir, 'X_test.pkl'))
+    
+    # Save labels and node ids
     y_train.to_pickle(os.path.join(balanced_dir, 'y_train.pkl'))
     y_dev.to_pickle(os.path.join(balanced_dir, 'y_dev.pkl'))
     y_test.to_pickle(os.path.join(balanced_dir, 'y_test.pkl'))
 
 
-def load_features_and_labels(balanced='non', include_edges=False):
+def load_features_and_labels(balanced='non'):
     """ Get data set splits (separate features and labels)
     """
-    print('Loading dataset splits in %s-balanced mode' % balanced)
     # Load data feature splits
     balanced_dir = os.path.join(PROCESSED_DATA_DIR, '%s_balanced' % balanced)
     X_train = pd.read_pickle(os.path.join(balanced_dir, 'X_train.pkl'))
     X_dev = pd.read_pickle(os.path.join(balanced_dir, 'X_dev.pkl'))
     X_test = pd.read_pickle(os.path.join(balanced_dir, 'X_test.pkl'))
-
-    # Scale features
+    
+    # Scale features (fitting scaler only with training data)
     scaler = RobustScaler().fit(X_train)  # pd.DataFrame -> np.ndarray
     X_train = scaler.transform(X_train)
     X_dev = scaler.transform(X_dev)
     X_test = scaler.transform(X_test)
-
+    
     # Load labels
     y_train = pd.read_pickle(os.path.join(balanced_dir, 'y_train.pkl'))
     y_dev = pd.read_pickle(os.path.join(balanced_dir, 'y_dev.pkl'))
     y_test = pd.read_pickle(os.path.join(balanced_dir, 'y_test.pkl'))
-
+    
     # Return features and labels in separate objects
     if __name__ == '__main__':
-        print('Loaded features and labels successfully!')
+        print('Loaded %s-balanced features and labels successfully!' % balanced)
         print(' - X_train: %s, y_train: %s' % (X_train.shape, y_train.shape))
         print(' - X_dev: %s, y_dev: %s' % (X_dev.shape, y_dev.shape))
         print(' - X_test: %s, y_test: %s' % (X_test.shape, y_test.shape))
     return X_train, X_dev, X_test, y_train, y_dev, y_test
 
 
-def load_edges(link_cond):
+def load_edges(link_cond, node_ids=None):
     """ Load edges between patient-wards, given {'wards', 'caregivers', 'all'}
         condition
     """
+    # Load edges and remove edges of absent nodes (e.g., for under-sampling)
     edges = pd.read_csv(PATH_LINK_DICT[link_cond], index_col=[0])
+    if node_ids is not None:  # remove edges that are not in node_ids
+        edges = edges[edges['src'].isin(node_ids) &
+                      edges['dest'].isin(node_ids)]
     if __name__ == '__main__':
-        print('Loaded graph edges successfully: %s' % edges.shape)
+        print('Loaded graph edges successfully: %s' % (edges.shape,))
     return edges
 
 

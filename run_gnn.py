@@ -14,32 +14,44 @@ from sklearn.metrics import classification_report
 from data.data_utils import load_features_and_labels, load_edges
 
 
-TRAIN_MODE = 'transductive'  # 'transductive', 'inductive' (not working for now)
 N_TRAIN_EPOCHS = 400
 LR = 1e-2
 N_HIDDEN = 32
 LAYER_TYPE = 'sage'  # 'gcn', 'sage', 'gat'
-BALANCED_COND = 'non'  # 'non', 'over', 'under'
-LINK_COND = 'wards'  # 'all', 'wards', 'caregivers'
+SETTING_CONDS = ['transductive', 'inductive']
+BALANCED_CONDS = ['over']  # ['non', 'over', 'under']  # CHECK LINKS IN GRAPH FOR UNDER
+LINK_CONDS = ['all', 'wards', 'caregivers']
 DATA_DIR = os.path.join('data', 'processed')
-LINK_PATH = os.path.join(DATA_DIR, 'graph_links_%s.csv' % LINK_COND)
-CKPT_DIR = os.path.join('models', 'GNN', 'ckpts', '%s_balanced' % BALANCED_COND)
-CKPT_PATH = os.path.join(CKPT_DIR, 'graph_links_%s' % LINK_COND)
 TEST_ONLY = False
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 
 def main():
-    """ Train a GCN to predict HAI from patient nodes and worker edges
+    """ Train a GNN in different settings, data balance and link conditions
+    """
+    for setting_cond in SETTING_CONDS:
+        for balanced_cond in BALANCED_CONDS:
+            for link_cond in LINK_CONDS:
+                ckpt_path = os.path.join('models',
+                                         'gnn',
+                                         '%s_setting' % setting_cond,
+                                         '%s_balanced' % balanced_cond,
+                                         'links_%s' % link_cond)
+                print('New simulation: %s setting, %s-balanced data, %s links'%
+                      (setting_cond, balanced_cond, link_cond))
+                train_model(setting_cond, balanced_cond, link_cond, ckpt_path)
+                
+
+def train_model(setting, balanced, link, ckpt_path):
+    """ Train a GNN model to predict HAI from patient nodes and worker edges
     """
     # Initialize data and model
-    ckpt_path = os.path.join(CKPT_DIR, CKPT_PATH)
-    dataset = IPCPredict()
+    dataset = IPCPredict(balanced, link, DEVICE)
     model = Net(dataset)
-
+    
     # Train model if required
     if not TEST_ONLY:
-        train_loss_plot, dev_loss_plot = train_network(model, dataset)
+        train_loss_plot, dev_loss_plot = train_network(model, dataset, setting)
         os.makedirs(os.path.split(ckpt_path)[0], exist_ok=True)
         torch.save(model.state_dict(), ckpt_path)
     else:
@@ -50,18 +62,18 @@ def main():
     result_text = test_network(model, dataset)
 
     # Plot training process (if any) and testing metrics
-    plot_model_results(train_loss_plot, dev_loss_plot, result_text)
+    result_path = ckpt_path.replace('.pt', '.png')
+    plot_model_results(train_loss_plot, dev_loss_plot, result_text, result_path)
  
 
-def train_network(model: nn.Module, dataset: InMemoryDataset):
+def train_network(model: nn.Module, dataset: InMemoryDataset, setting: str):
     """ Train a network to predict bacterial colonisation in hospitals
     """    
     # Initialize data variables
     train_mask, dev_mask = dataset.split_ids['train'], dataset.split_ids['dev']
     whole_data = dataset[0]
-    if TRAIN_MODE == 'inductive':
-        train_data = whole_data[train_mask]
-        dev_data = whole_data[dev_mask]
+    if setting == 'inductive':
+        train_data, dev_data = whole_data[train_mask], whole_data[dev_mask]
     train_golds = whole_data.y[train_mask]
     dev_golds = whole_data.y[dev_mask]
     wb = ((train_golds == 0).sum() / (train_golds == 1).sum()).item()
@@ -69,47 +81,50 @@ def train_network(model: nn.Module, dataset: InMemoryDataset):
     dev_weights = torch.tensor([1 if g == 0 else wb for g in dev_golds])
 
     # Initialize model and learning
-    model.train()
     train_criterion = nn.BCEWithLogitsLoss(weight=train_weights.to(DEVICE))
     dev_criterion = nn.BCEWithLogitsLoss(weight=dev_weights.to(DEVICE))
     optimizer = AdamW(model.parameters(), lr=LR, weight_decay=1e-4)
     scheduler = OneCycleLR(optimizer, LR, total_steps=N_TRAIN_EPOCHS)
     
     # Start training model
-    print('Training GNN model (%s-conv layers)' % LAYER_TYPE)
+    print(' - Training GNN model (%s-conv layers)' % LAYER_TYPE)
     train_loss_plot, dev_loss_plot = [], []
     for epoch in range(N_TRAIN_EPOCHS):
+        model.train()
         optimizer.zero_grad()
-
-        # Different ways of including features at training time
-        if TRAIN_MODE == 'inductive':
-            # TODO: define an inductive dataset that is composed of *several* graphs (one for each split)
-            raise NotImplementedError('Not working for now. Stay tuned!')
-            train_logits = model(train_data)
-            dev_logits = model(dev_data)
-            preds = torch.sigmoid(logits).view(-1)  # no mask for inductive, because data is just the training graph
-        elif TRAIN_MODE == 'transductive':
-            logits = model(whole_data.x, whole_data.edge_index)
-            preds = torch.sigmoid(logits)
-            train_preds = preds[train_mask].view(-1)
-            with torch.no_grad():  # required?
-                dev_preds = preds[dev_mask].view(-1)
         
-        # Compute loss and perform backpropagation
+        # Compute training loss (inductive or transductive setting)
+        if setting == 'inductive':
+            train_logits = model(train_data)
+            train_preds = torch.sigmoid(train_logits).view(-1)
+        elif setting == 'transductive':
+            whole_logits = model(whole_data.x, whole_data.edge_index)
+            whole_preds = torch.sigmoid(whole_logits)
+            train_preds = whole_preds[train_mask].view(-1)
         train_loss = train_criterion(train_preds, train_golds)
+            
+        # Perform backpropagation
         train_loss.backward()
-        with torch.no_grad():  # required?
-            dev_loss = dev_criterion(dev_preds, dev_golds)
         optimizer.step()
         scheduler.step()
+        
+        # Compute validation loss (inductive or transductive setting)
+        model.eval()
+        with torch.no_grad():
+            if setting == 'inductive':
+                dev_logits = model(dev_data)
+                dev_preds = torch.sigmoid(dev_logits).view(-1)
+            elif setting == 'transductive':
+                dev_preds = whole_preds[dev_mask].view(-1)
+            dev_loss = dev_criterion(dev_preds, dev_golds)
 
         # Record and report training loss
         train_loss_plot.append(train_loss.item())
         dev_loss_plot.append(dev_loss.item())
-        print('\r - Epoch %03d: loss = %.03f' % (epoch, train_loss), end='')
+        print('\r ---- Epoch %03d: loss = %.03f' % (epoch, train_loss), end='')
     
     # Return the output of training (and also: model has been updated)
-    print('\nTraining finished')
+    print('\n - Training finished')
     return train_loss_plot, dev_loss_plot
 
 
@@ -117,11 +132,12 @@ def test_network(model, dataset, thresh=0.9):
     """ Generates predictions with a trained network and report various metrics
     """
     # Initialize model, data and labels
-    print('Testing model')
+    print(' - Testing model')
     model.eval()
     test_mask = dataset.split_ids['dev']
     whole_data = dataset[0]
     golds = whole_data.y[test_mask]
+    if DEVICE.type != 'cpu': golds = golds.cpu().numpy()
 
     # Compute model predictions (using the whole graph, i.e., transductive mode)
     logits = model(whole_data.x, whole_data.edge_index)
@@ -134,7 +150,8 @@ def test_network(model, dataset, thresh=0.9):
 
 def plot_model_results(train_loss_plot: list[float],
                        dev_loss_plot: list[float],
-                       result_text: str) -> None:
+                       result_text: str,
+                       result_path) -> None:
     """ Plot a summary of the training process (training loss vs epoch)
     """
     _, ax = plt.subplots(figsize=(8, 4))
@@ -145,8 +162,7 @@ def plot_model_results(train_loss_plot: list[float],
             bbox=dict(boxstyle='square', facecolor='white'))
     ax.set_xlabel('Epoch')
     ax.set_ylabel('Training loss')
-    result_path = os.path.join(CKPT_DIR, CKPT_PATH.replace('.pt', '.png'))
-    plt.legend()
+    plt.legend(loc='lower left')
     plt.tight_layout()
     plt.savefig(result_path, dpi=300)
 
@@ -180,26 +196,27 @@ class Net(nn.Module):
 class IPCPredict(InMemoryDataset):
     """ Dataset containing graph data, and node indices for train, dev and test
     """
-    def __init__(self, transform=None):
-        super(IPCPredict, self).__init__('.', transform, None, None)  # what????
-        print('Creating data graph')
-        graph, split_ids = self.create_graph_and_split_indices()
+    def __init__(self, balanced_cond, link_cond, device):
+        super(IPCPredict, self).__init__()
+        print(' - Creating data graph')
+        graph, split_ids = self.create_graph_and_split_ids(balanced_cond, link_cond)
         data = Data(x=graph.x, y=graph.y, edge_index=graph.edge_index)
         data, _ = self.collate([data])
-        data.to(DEVICE)
+        data.to(device)
         self.data = data
         self.split_ids = split_ids
-
+        
     @staticmethod
-    def create_graph_and_split_indices() -> nx.Graph:
-        """ Retrieve patient ward data and create a graph, where patients are
-            nodes and edges are hospital workers (?)
+    def create_graph_and_split_ids(balanced_cond, link_cond):
+        """ Retrieve patient ward data and create a graph, where nodes are
+            patient-ward entities connected by ward and/or caregiver edges
         """
-        # Load features and labels, then initialize the graph
+        # Load features, labels, and node ids
         X_train, X_dev, X_test, y_train, y_dev, y_test =\
-             load_features_and_labels(BALANCED_COND)
+             load_features_and_labels(balanced_cond)
         node_features = np.concatenate((X_train, X_dev, X_test))
         node_labels = np.concatenate((y_train, y_dev, y_test))
+        node_ids = np.concatenate([y.index for y in (y_train, y_dev, y_test)])
         
         # Retrieve split indices for node-edge correspondance
         split_ids = {
@@ -210,9 +227,9 @@ class IPCPredict(InMemoryDataset):
         
         # Creates graph nodes and edges
         nx_graph = nx.Graph()
-        for node_id, node in enumerate(node_features):
+        for node_id, node in zip(node_ids, node_features):
             nx_graph.add_node(node_id, x=node.tolist())
-        edges = load_edges(link_cond=LINK_COND)
+        edges = load_edges(link_cond, node_ids)
         nx_graph.add_edges_from(edges.values)
         
         # Create and return pytorch-geometric object from the graph
