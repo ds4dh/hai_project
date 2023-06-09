@@ -43,7 +43,7 @@ ENTEROBACTERIAE = [
     'SHIGELLA FLEXNERI', 'SALMONELLA HADAR', 'ESCHERICHIA FERGUSONII',
     'LECLERCIA ADECARBOXYLATA', 'RAOULTELLA ORNITHINOLYTICA', 'SALMONELLA DUBLIN'
 ]
-SPECIMENS = [  # ????? seems not useful
+SPECIMENS = [
     'BRONCHOALVEOLAR LAVAGE', 'SPUTUM', 'BLOOD CULTURE', 'URINE',
     'BLOOD CULTURE - NEONATE', 'SEROLOGY/BLOOD', 'EYE',
     'BLOOD CULTURE ( MYCO/F LYTIC BOTTLE)', 'PLEURAL FLUID', 'SWAB',
@@ -80,7 +80,7 @@ CAREGIVER_COLUMNS = ['SUBJECT_ID', 'HADM_ID', 'INTIME', 'OUTTIME', 'CURR_WARDID'
 WARD_COLUMNS = ['SUBJECT_ID', 'HADM_ID', 'INTIME', 'OUTTIME', 'CURR_WARDID']
 STRING_FEATURES = ['PREV_CAREUNIT', 'CURR_CAREUNIT', 'GENDER']
 NUMERICAL_FEATURES = ['DIAG_ID', 'CURR_WARDID', 'PREV_WARDID', 'LOS', 'LOSH']
-REGENERATE_DATASET_FROM_SCRATCH = True
+REGENERATE_DATASET_FROM_SCRATCH = False
 
 
 def main():
@@ -88,6 +88,7 @@ def main():
     """
     if REGENERATE_DATASET_FROM_SCRATCH:
         # Generate labels and basic features for all patients-wards
+        os.makedirs(PROCESSED_DATA_DIR, exist_ok=True)
         generate_patient_colonisation_labels()  # (62580 x 6)
         generate_patient_wards()  # (261_857 x 13)
         generate_diagnose_data()  # (261_857 x 15)
@@ -106,12 +107,13 @@ def main():
         generate_ward_links()  # (184_272 x 2); approx. 3 minutes
         merge_ward_and_caregiver_links()  # (722_996 x 2), i.e., [src, dest]
 
-    # Save sets for balanced and non-balanced (training???) samples
+    # Save different data splittings for different balanced scenarios
     for balanced in ['non', 'under', 'over']:
-        save_data_splits(balanced)
+        if REGENERATE_DATASET_FROM_SCRATCH:
+            save_data_splits(balanced)
         load_features_and_labels(balanced)  # check everything went good
     for link_cond in PATH_LINK_DICT.keys():
-        load_edges(link_cond)
+        load_edges(link_cond)  # check everything went good (links)
 
 
 def generate_patient_colonisation_labels():
@@ -134,7 +136,7 @@ def generate_patient_colonisation_labels():
     df_admissions['COLONISED_DATE'] = ''
     df_admissions['ORG_NAME'] = ''
     df_admissions['SPEC_TYPE_DESC'] = ''
-
+    
     # Build final label collection
     df_final = pd.concat([df_microb, df_admissions])
     df_final = df_final.drop_duplicates()
@@ -421,12 +423,12 @@ def save_data_splits(balanced='non'):
     X_train, X_dev, y_train, y_dev = train_test_split(
         X_train, y_train, test_size=0.25, random_state=2, shuffle=True)
     
-    # Save features
+    # Save features (as numpy.array)
     X_train.to_pickle(os.path.join(balanced_dir, 'X_train.pkl'))
     X_dev.to_pickle(os.path.join(balanced_dir, 'X_dev.pkl'))
     X_test.to_pickle(os.path.join(balanced_dir, 'X_test.pkl'))
     
-    # Save labels and node ids
+    # Save labels (as dataframes, to keep trak of node ids)
     y_train.to_pickle(os.path.join(balanced_dir, 'y_train.pkl'))
     y_dev.to_pickle(os.path.join(balanced_dir, 'y_dev.pkl'))
     y_test.to_pickle(os.path.join(balanced_dir, 'y_test.pkl'))
