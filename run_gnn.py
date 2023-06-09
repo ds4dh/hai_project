@@ -262,13 +262,14 @@ class IPCPredict(InMemoryDataset):
             appends train, dev, and test masks to the graph
         """
         # Create graph using the totality of nodes, node labels, and node ids
-        features = np.concatenate((X['train'], X['dev'], X['test']))
-        labels = np.concatenate((y['train'], y['dev'], y['test']))
-        ids = np.concatenate((ids['train'], ids['dev'], ids['test']))
-        pyg_graph = self.create_graph(features, labels, ids, link_cond)
+        Xs = np.concatenate((X['train'], X['dev'], X['test']))
+        ys = np.concatenate((y['train'], y['dev'], y['test']))
+        idss = np.concatenate((ids['train'], ids['dev'], ids['test']))
+        pyg_graph = self.create_graph(Xs, ys, idss, link_cond)
         
         # Create masks to retrieve train, dev, and test predictions
-        masks = {k: torch.zeros(features.shape[0], dtype=torch.bool)
+        import pdb; pdb.set_trace()
+        masks = {k: torch.zeros(Xs.shape[0], dtype=torch.bool)
                  for k in ('train', 'dev', 'test')}
         masks['train'][:len(X['train'])] = True
         masks['dev'][len(X['train']):len(X['train']) + len(X['dev'])] = True
