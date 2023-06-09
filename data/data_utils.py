@@ -453,14 +453,22 @@ def load_features_and_labels(balanced='non'):
     y_train = pd.read_pickle(os.path.join(balanced_dir, 'y_train.pkl'))
     y_dev = pd.read_pickle(os.path.join(balanced_dir, 'y_dev.pkl'))
     y_test = pd.read_pickle(os.path.join(balanced_dir, 'y_test.pkl'))
-    
-    # Return features and labels in separate objects
+
+    # Retrieve node indices
+    id_train, id_dev, id_test = y_train.index, y_dev.index, y_test.index
+
+    # Message for debug purpose
     if __name__ == '__main__':
         print('Loaded %s-balanced features and labels successfully!' % balanced)
         print(' - X_train: %s, y_train: %s' % (X_train.shape, y_train.shape))
         print(' - X_dev: %s, y_dev: %s' % (X_dev.shape, y_dev.shape))
         print(' - X_test: %s, y_test: %s' % (X_test.shape, y_test.shape))
-    return X_train, X_dev, X_test, y_train, y_dev, y_test
+    
+    # Return data alltogether
+    X_data = {'train': X_train, 'dev': X_dev, 'test': X_test}
+    y_data = {'train': y_train, 'dev': y_dev, 'test': y_test}
+    id_data = {'train': id_train, 'dev': id_dev, 'test': id_test}
+    return X_data, y_data, id_data
 
 
 def load_edges(link_cond, node_ids=None):
@@ -470,8 +478,7 @@ def load_edges(link_cond, node_ids=None):
     # Load edges and remove edges of absent nodes (e.g., for under-sampling)
     edges = pd.read_csv(PATH_LINK_DICT[link_cond], index_col=[0])
     if node_ids is not None:  # remove edges that are not in node_ids
-        edges = edges[edges['src'].isin(node_ids) &
-                      edges['dest'].isin(node_ids)]
+        edges = edges[edges['src'].isin(node_ids) & edges['dst'].isin(node_ids)]
     if __name__ == '__main__':
         print('Loaded graph edges successfully: %s' % (edges.shape,))
     return edges

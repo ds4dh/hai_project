@@ -1,5 +1,6 @@
 import os
 import numpy as np
+import pandas as pd
 import matplotlib.pyplot as plt
 import networkx as nx
 import torch
@@ -19,7 +20,7 @@ LR = 1e-2
 N_HIDDEN = 32
 LAYER_TYPE = 'sage'  # 'gcn', 'sage', 'gat'
 SETTING_CONDS = ['transductive', 'inductive']
-BALANCED_CONDS = ['non']  # ['non', 'over', 'under']  # CHECK LINKS IN GRAPH FOR UNDER
+BALANCED_CONDS = ['over', 'under', 'non']
 LINK_CONDS = ['all', 'wards', 'caregivers']
 DATA_DIR = os.path.join('data', 'processed')
 TEST_ONLY = False
@@ -42,11 +43,14 @@ def main():
                 train_model(setting_cond, balanced_cond, link_cond, ckpt_path)
                 
 
-def train_model(setting, balanced, link, ckpt_path):
+def train_model(setting: str,
+                balanced: str,
+                link: str,
+                ckpt_path: str):
     """ Train a GNN model to predict HAI from patient nodes and worker edges
     """
     # Initialize data and model
-    dataset = IPCPredict(balanced, link, DEVICE)
+    dataset = IPCPredict(balanced, link, setting)
     model = Net(dataset)
     
     # Train model if required
@@ -59,23 +63,32 @@ def train_model(setting, balanced, link, ckpt_path):
     
     # Reload checkpoint and test model
     model.load_state_dict(torch.load(ckpt_path))
-    result_text = test_network(model, dataset)
+    result_text = evaluate_model(model, dataset, setting)
 
     # Plot training process (if any) and testing metrics
     result_path = ckpt_path.replace('.pt', '.png')
     plot_model_results(train_loss_plot, dev_loss_plot, result_text, result_path)
- 
 
-def train_network(model: nn.Module, dataset: InMemoryDataset, setting: str):
+
+def train_network(model: nn.Module,
+                  dataset: InMemoryDataset,
+                  setting: str):
     """ Train a network to predict bacterial colonisation in hospitals
     """    
-    # Initialize data variables
-    train_mask, dev_mask = dataset.split_ids['train'], dataset.split_ids['dev']
-    whole_data = dataset[0]
+    # Load data (inductive or transductive setting)
     if setting == 'inductive':
-        train_data, dev_data = whole_data[train_mask], whole_data[dev_mask]
-    train_golds = whole_data.y[train_mask]
-    dev_golds = whole_data.y[dev_mask]
+        train_data = dataset.get_split('train').to(DEVICE)
+        dev_data = dataset.get_split('dev').to(DEVICE)
+        train_golds = train_data.y
+        dev_golds = dev_data.y
+    elif setting == 'transductive':
+        whole_data = dataset.get_split('whole').to(DEVICE)
+        train_mask = whole_data.masks['train']
+        dev_mask = whole_data.masks['dev']
+        train_golds = whole_data.y[train_mask]
+        dev_golds = whole_data.y[dev_mask]
+
+    # Set weights for class imbalance when computing loss
     wb = ((train_golds == 0).sum() / (train_golds == 1).sum()).item()
     train_weights = torch.tensor([1 if g == 0 else wb for g in train_golds])
     dev_weights = torch.tensor([1 if g == 0 else wb for g in dev_golds])
@@ -95,13 +108,13 @@ def train_network(model: nn.Module, dataset: InMemoryDataset, setting: str):
         
         # Compute training loss (inductive or transductive setting)
         if setting == 'inductive':
-            train_logits = model(train_data)
-            train_preds = torch.sigmoid(train_logits).view(-1)
+            train_logits = model(train_data.x, train_data.edge_index)
+            train_probs = torch.sigmoid(train_logits).view(-1)
         elif setting == 'transductive':
             whole_logits = model(whole_data.x, whole_data.edge_index)
-            whole_preds = torch.sigmoid(whole_logits)
-            train_preds = whole_preds[train_mask].view(-1)
-        train_loss = train_criterion(train_preds, train_golds)
+            whole_probs = torch.sigmoid(whole_logits)
+            train_probs = whole_probs[train_mask].view(-1)
+        train_loss = train_criterion(train_probs, train_golds)
             
         # Perform backpropagation
         train_loss.backward()
@@ -112,11 +125,11 @@ def train_network(model: nn.Module, dataset: InMemoryDataset, setting: str):
         model.eval()
         with torch.no_grad():
             if setting == 'inductive':
-                dev_logits = model(dev_data)
-                dev_preds = torch.sigmoid(dev_logits).view(-1)
+                dev_logits = model(dev_data.x, dev_data.edge_index)
+                dev_probs = torch.sigmoid(dev_logits).view(-1)
             elif setting == 'transductive':
-                dev_preds = whole_preds[dev_mask].view(-1)
-            dev_loss = dev_criterion(dev_preds, dev_golds)
+                dev_probs = whole_probs[dev_mask].view(-1)
+            dev_loss = dev_criterion(dev_probs, dev_golds)
 
         # Record and report training loss
         train_loss_plot.append(train_loss.item())
@@ -128,24 +141,40 @@ def train_network(model: nn.Module, dataset: InMemoryDataset, setting: str):
     return train_loss_plot, dev_loss_plot
 
 
-def test_network(model, dataset, thresh=0.9):
+def evaluate_model(model: nn.Module,
+                   dataset: InMemoryDataset,
+                   setting: str,
+                   thresh: float=0.9):
     """ Generates predictions with a trained network and report various metrics
     """
+    # TODO: DO LIKE IN RUN_CONTROLS WITH COMPUTATION OF BEST THRESHOLD ETC!
     # Initialize model, data and labels
     print(' - Testing model')
     model.eval()
-    test_mask = dataset.split_ids['dev']
-    whole_data = dataset[0]
-    golds = whole_data.y[test_mask]
-    if DEVICE.type != 'cpu': golds = golds.cpu().numpy()
+    if setting == 'inductive':
+        test_data = dataset.get_split('dev').to(DEVICE)  # with dev for now
+        test_golds = test_data.y
+    elif setting == 'transductive':
+        whole_data = dataset.get_split('whole').to(DEVICE)
+        test_mask = whole_data.masks['dev']  # with dev for now
+        test_golds = whole_data.y[test_mask]
 
-    # Compute model predictions (using the whole graph, i.e., transductive mode)
-    logits = model(whole_data.x, whole_data.edge_index)
-    probs = torch.sigmoid(logits)[test_mask]
-    preds = [0 if p[0] < thresh else 1 for p in probs]  # do different thresholds?
-    
+    # Compute model predictions
+    with torch.no_grad():
+        if setting == 'inductive':
+            test_logits = model(test_data.x, test_data.edge_index)
+            test_probs = torch.sigmoid(test_logits).view(-1)
+        elif setting == 'transductive':
+            whole_logits = model(whole_data.x, whole_data.edge_index)
+            whole_preds = torch.sigmoid(whole_logits)
+            test_probs = whole_preds[test_mask].view(-1)
+
     # Compute all metrics using model predictions
-    return classification_report(golds, preds)
+    if DEVICE.type != 'cpu':
+        test_probs = test_probs.cpu().numpy()
+        test_golds = test_golds.cpu().numpy()
+    test_preds = [0 if p < thresh else 1 for p in test_probs]
+    return classification_report(test_golds, test_preds)
 
 
 def plot_model_results(train_loss_plot: list[float],
@@ -196,47 +225,78 @@ class Net(nn.Module):
 class IPCPredict(InMemoryDataset):
     """ Dataset containing graph data, and node indices for train, dev and test
     """
-    def __init__(self, balanced_cond, link_cond, device):
+    def __init__(self, balanced_cond, link_cond, setting_cond):
         super(IPCPredict, self).__init__()
         print(' - Creating data graph')
-        graph, split_ids = self.create_graph_and_split_ids(balanced_cond, link_cond)
-        data = Data(x=graph.x, y=graph.y, edge_index=graph.edge_index)
-        data, _ = self.collate([data])
-        data.to(device)
-        self.data = data
-        self.split_ids = split_ids
-        
-    @staticmethod
-    def create_graph_and_split_ids(balanced_cond, link_cond):
-        """ Retrieve patient ward data and create a graph, where nodes are
-            patient-ward entities connected by ward and/or caregiver edges
-        """
-        # Load features, labels, and node ids
-        X_train, X_dev, X_test, y_train, y_dev, y_test =\
-             load_features_and_labels(balanced_cond)
-        node_features = np.concatenate((X_train, X_dev, X_test))
-        node_labels = np.concatenate((y_train, y_dev, y_test))
-        node_ids = np.concatenate([y.index for y in (y_train, y_dev, y_test)])
-        
-        # Retrieve split indices for node-edge correspondance
-        split_ids = {
-            'train': range(0, len(X_train)),
-            'dev': range(len(X_train), len(X_train) + len(X_dev)),
-            'test': range(len(X_train) + len(X_dev), len(node_features)),
-        }
-        
-        # Creates graph nodes and edges
-        nx_graph = nx.Graph()
-        for node_id, node in zip(node_ids, node_features):
-            nx_graph.add_node(node_id, x=node.tolist())
-        edges = load_edges(link_cond, node_ids)
-        nx_graph.add_edges_from(edges.values)
-        
-        # Create and return pytorch-geometric object from the graph
-        pyg_graph = from_networkx(nx_graph)
-        pyg_graph.y = torch.tensor(node_labels, dtype=torch.float)
-        return pyg_graph, split_ids
+        # Load features, labels, node ids, and initialize data
+        X, y, ids = load_features_and_labels(balanced_cond)
+        graph_list = []
 
+        # Create graph for a transductive setting
+        if setting_cond == 'transductive':
+            graph = self.create_transductive_graph(X, y, ids, link_cond)
+            graph_list.append(graph)
+        
+        # Create graphs for an inductive setting
+        elif setting_cond == 'inductive':
+            for split in ['train', 'dev', 'test']:
+                X_, y_, ids_ = X[split], y[split], ids[split]
+                graph = self.create_graph(X_, y_, ids_, link_cond)
+                graph_list.append(graph)
+
+        # Define splits and collate data into a nice dataset
+        self.split_indices = {'whole': 0, 'train': 0, 'dev': 1, 'test': 2}
+        self.data, self.slices = self.collate(graph_list)
+    
+    def get_split(self, name):
+        """ Workaround to get dataset splits by split name instead of indices
+        """
+        return self[self.split_indices[name]]
+    
+    def create_transductive_graph(self,
+                                  X: dict[np.ndarray],
+                                  y: dict[pd.Series],
+                                  ids: dict[pd.Index],
+                                  link_cond: str):
+        """ Create transductive graph using nodes, node labels, node ids, and
+            appends train, dev, and test masks to the graph
+        """
+        # Create graph using the totality of nodes, node labels, and node ids
+        features = np.concatenate((X['train'], X['dev'], X['test']))
+        labels = np.concatenate((y['train'], y['dev'], y['test']))
+        ids = np.concatenate((ids['train'], ids['dev'], ids['test']))
+        pyg_graph = self.create_graph(features, labels, ids, link_cond)
+        
+        # Create masks to retrieve train, dev, and test predictions
+        masks = {k: torch.zeros(features.shape[0], dtype=torch.bool)
+                 for k in ('train', 'dev', 'test')}
+        masks['train'][:len(X['train'])] = True
+        masks['dev'][len(X['train']):len(X['train']) + len(X['dev'])] = True
+        masks['test'][-len(X['test']):] = True
+        
+        # Return final graph, after adding transductive masks
+        pyg_graph.masks = masks
+        return pyg_graph
+    
+    @staticmethod
+    def create_graph(X: np.ndarray,
+                     y: pd.Series,
+                     ids: pd.Index,
+                     link_cond: str):
+        """ Create graph using nodes, node labels, and node ids
+        """
+        # Initialize graph and add nodes features and labels
+        nx_graph = nx.Graph()
+        for node_id, feat, lbl in zip(ids, X, y):
+            node_info = {'x': feat.tolist(), 'y': float(lbl)}
+            nx_graph.add_node(node_id, **node_info)
+        
+        # Add edges
+        edges = load_edges(link_cond, ids)
+        nx_graph.add_edges_from(edges.values)
+
+        # Return pytorch-geometric object from the graph
+        return from_networkx(nx_graph)
 
 if __name__ == '__main__':
     main()
