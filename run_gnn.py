@@ -9,18 +9,22 @@ import torch.nn.functional as F
 from torch.optim.lr_scheduler import OneCycleLR
 from torch.optim import AdamW
 from torch_geometric.nn import GCNConv, GATConv, SAGEConv
-from torch_geometric.data import InMemoryDataset, Data
+from torch_geometric.data import InMemoryDataset
 from torch_geometric.utils.convert import from_networkx
 from sklearn.metrics import classification_report
-from data.data_utils import load_features_and_labels, load_edges
+from data.data_utils import (
+    load_features_and_labels,
+    load_edges,
+    account_for_duplicate_nodes,
+)
 
 
 N_TRAIN_EPOCHS = 400
 LR = 1e-2
 N_HIDDEN = 32
 LAYER_TYPE = 'sage'  # 'gcn', 'sage', 'gat'
-SETTING_CONDS = ['transductive', 'inductive']
-BALANCED_CONDS = ['over', 'under', 'non']
+SETTING_CONDS = ['inductive', 'transductive']
+BALANCED_CONDS = ['non', 'under', 'over']
 LINK_CONDS = ['all', 'wards', 'caregivers']
 DATA_DIR = os.path.join('data', 'processed')
 TEST_ONLY = False
@@ -262,14 +266,13 @@ class IPCPredict(InMemoryDataset):
             appends train, dev, and test masks to the graph
         """
         # Create graph using the totality of nodes, node labels, and node ids
-        Xs = np.concatenate((X['train'], X['dev'], X['test']))
-        ys = np.concatenate((y['train'], y['dev'], y['test']))
-        idss = np.concatenate((ids['train'], ids['dev'], ids['test']))
-        pyg_graph = self.create_graph(Xs, ys, idss, link_cond)
+        X_ = np.concatenate((X['train'], X['dev'], X['test']))
+        y_ = np.concatenate((y['train'], y['dev'], y['test']))
+        ids_ = np.concatenate((ids['train'], ids['dev'], ids['test']))
+        pyg_graph = self.create_graph(X_, y_, ids_, link_cond)
         
         # Create masks to retrieve train, dev, and test predictions
-        import pdb; pdb.set_trace()
-        masks = {k: torch.zeros(Xs.shape[0], dtype=torch.bool)
+        masks = {k: torch.zeros(X_.shape[0], dtype=torch.bool)
                  for k in ('train', 'dev', 'test')}
         masks['train'][:len(X['train'])] = True
         masks['dev'][len(X['train']):len(X['train']) + len(X['dev'])] = True
@@ -282,22 +285,24 @@ class IPCPredict(InMemoryDataset):
     @staticmethod
     def create_graph(X: np.ndarray,
                      y: pd.Series,
-                     ids: pd.Index,
+                     node_ids: pd.Index,
                      link_cond: str):
         """ Create graph using nodes, node labels, and node ids
         """
+        # Load edges, and update node ids and edges in case of over-sampling
+        edges = load_edges(link_cond, node_ids)
+        node_ids, edges = account_for_duplicate_nodes(node_ids, edges)
+        
         # Initialize graph and add nodes features and labels
         nx_graph = nx.Graph()
-        for node_id, feat, lbl in zip(ids, X, y):
+        for node_id, feat, lbl in zip(node_ids, X, y):
             node_info = {'x': feat.tolist(), 'y': float(lbl)}
             nx_graph.add_node(node_id, **node_info)
-        
-        # Add edges
-        edges = load_edges(link_cond, ids)
+            
+        # Add edges and create pytorch-geometric (Data()) object from the graph
         nx_graph.add_edges_from(edges.values)
-
-        # Return pytorch-geometric object from the graph
         return from_networkx(nx_graph)
-
+    
+    
 if __name__ == '__main__':
     main()

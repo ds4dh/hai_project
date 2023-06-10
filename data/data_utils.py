@@ -108,18 +108,18 @@ def main():
         merge_ward_and_caregiver_links()  # (722_996 x 2), i.e., [src, dest]
 
     # Save different data splittings for different balanced scenarios
-    for balanced in ['non', 'under', 'over']:
-        if REGENERATE_DATASET_FROM_SCRATCH:
-            save_data_splits(balanced)
-        load_features_and_labels(balanced)  # check everything went good
+    for balanced_cond in ['non', 'under', 'over']:
+        if 1:  # REGENERATE_DATASET_FROM_SCRATCH:
+            save_data_splits(balanced_cond)
+        load_features_and_labels(balanced_cond)
     for link_cond in PATH_LINK_DICT.keys():
-        load_edges(link_cond)  # check everything went good (links)
+        load_edges(link_cond)
 
 
 def generate_patient_colonisation_labels():
     """ Label patients based on whether they were colonised by selected organisms
     """
-    print('Creating colonisation labels based on microbiolgy events')    
+    print('Creating colonisation labels based on microbiolgy events')
     # Find patients that were infected, if relevant organism + specimen detected
     df_microb = pd.read_csv(PATH_MICROBIOLOGY_EVENTS, usecols=MICROB_COLUMNS)
     df_microb = df_microb[df_microb['ORG_NAME'].isin(ENTEROBACTERIAE)]
@@ -331,7 +331,7 @@ def generate_caregiver_links():
     df_patients = df_patients.drop_duplicates()  # 250k samples -> faster!
     df_grouped = df_patients.groupby(['CHARTDATE', 'CGID'])  # 1 minute
     
-    # Add links between patients visited by the same caregiver on the same day    
+    # Add links between patients visited by the same caregiver on the same day
     links = set()
     patient_dict = dict(zip(df_data['PWARD_ID'], df_data['HADM_ID']))  # useful?
     for _, group in tqdm(df_grouped, desc='Computing links'):
@@ -482,6 +482,38 @@ def load_edges(link_cond, node_ids=None):
     if __name__ == '__main__':
         print('Loaded graph edges successfully: %s' % (edges.shape,))
     return edges
+
+
+def account_for_duplicate_nodes(node_ids: pd.Index, edges: pd.DataFrame):
+    """ Update duplicate nodes with unique ids and copy edges from the original,
+        in case of over-sampling (i.e., some nodes are duplicated)
+    """
+    # Identify nodes that are not unique
+    plural_node_ids = node_ids.value_counts()
+    plural_node_ids = plural_node_ids[plural_node_ids > 1]
+    max_node_id = max(node_ids)
+        
+    # Go through all duplicate nodes
+    node_ids_to_add, edges_to_add = [], []
+    for node_id, count in tqdm(
+            plural_node_ids.items(), total=len(plural_node_ids),
+            desc=' - Nodes and edges updated for over-sampling'):
+        # Identify new unique ids for duplicate nodes (but keep one original)
+        new_node_ids = list(range(max_node_id + 1, max_node_id + count))
+        node_ids_to_add.extend(new_node_ids)
+        max_node_id += count - 1  # count - 1 = len(new_node_ids)
+        
+        # Add new edges for updated node ids, copying original node edges
+        for new_node_id in new_node_ids:
+            new_edges = edges[(edges['src'] == node_id) |
+                              (edges['dst'] == node_id)]\
+                             .replace(node_id, new_node_id)
+            edges_to_add.append(new_edges)
+    
+    # Update and return new node_ids and edges
+    node_ids = node_ids.unique().append(pd.Index(node_ids_to_add))
+    edges = pd.concat([edges] + edges_to_add, ignore_index=True)
+    return node_ids, edges
 
 
 if __name__ == '__main__':
