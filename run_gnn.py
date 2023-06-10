@@ -25,7 +25,7 @@ N_HIDDEN = 32
 LAYER_TYPE = 'sage'  # 'gcn', 'sage', 'gat'
 SETTING_CONDS = ['inductive', 'transductive']
 BALANCED_CONDS = ['non', 'under', 'over']
-LINK_CONDS = ['all', 'wards', 'caregivers']
+LINK_CONDS = ['all', 'wards', 'caregivers', 'non']
 DATA_DIR = os.path.join('data', 'processed')
 TEST_ONLY = False
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -47,19 +47,19 @@ def main():
                 train_model(setting_cond, balanced_cond, link_cond, ckpt_path)
                 
 
-def train_model(setting: str,
-                balanced: str,
-                link: str,
+def train_model(setting_cond: str,
+                balanced_cond: str,
+                link_cond: str,
                 ckpt_path: str):
     """ Train a GNN model to predict HAI from patient nodes and worker edges
     """
     # Initialize data and model
-    dataset = IPCPredict(balanced, link, setting)
+    dataset = IPCPredict(setting_cond, balanced_cond, link_cond)
     model = Net(dataset)
     
     # Train model if required
     if not TEST_ONLY:
-        train_loss_plot, dev_loss_plot = train_network(model, dataset, setting)
+        train_loss_plot, dev_loss_plot = train_net(model, dataset, setting_cond)
         os.makedirs(os.path.split(ckpt_path)[0], exist_ok=True)
         torch.save(model.state_dict(), ckpt_path)
     else:
@@ -67,25 +67,26 @@ def train_model(setting: str,
     
     # Reload checkpoint and test model
     model.load_state_dict(torch.load(ckpt_path))
-    result_text = evaluate_model(model, dataset, setting)
+    result_text = evaluate_net(model, dataset, setting_cond)
 
     # Plot training process (if any) and testing metrics
     result_path = ckpt_path.replace('.pt', '.png')
     plot_model_results(train_loss_plot, dev_loss_plot, result_text, result_path)
 
 
-def train_network(model: nn.Module,
-                  dataset: InMemoryDataset,
-                  setting: str):
+def train_net(model: nn.Module,
+              dataset: InMemoryDataset,
+              setting_cond: str
+              ) -> tuple[list[float]]:
     """ Train a network to predict bacterial colonisation in hospitals
     """    
     # Load data (inductive or transductive setting)
-    if setting == 'inductive':
+    if setting_cond == 'inductive':
         train_data = dataset.get_split('train').to(DEVICE)
         dev_data = dataset.get_split('dev').to(DEVICE)
         train_golds = train_data.y
         dev_golds = dev_data.y
-    elif setting == 'transductive':
+    elif setting_cond == 'transductive':
         whole_data = dataset.get_split('whole').to(DEVICE)
         train_mask = whole_data.masks['train']
         dev_mask = whole_data.masks['dev']
@@ -111,10 +112,10 @@ def train_network(model: nn.Module,
         optimizer.zero_grad()
         
         # Compute training loss (inductive or transductive setting)
-        if setting == 'inductive':
+        if setting_cond == 'inductive':
             train_logits = model(train_data.x, train_data.edge_index)
             train_probs = torch.sigmoid(train_logits).view(-1)
-        elif setting == 'transductive':
+        elif setting_cond == 'transductive':
             whole_logits = model(whole_data.x, whole_data.edge_index)
             whole_probs = torch.sigmoid(whole_logits)
             train_probs = whole_probs[train_mask].view(-1)
@@ -128,10 +129,10 @@ def train_network(model: nn.Module,
         # Compute validation loss (inductive or transductive setting)
         model.eval()
         with torch.no_grad():
-            if setting == 'inductive':
+            if setting_cond == 'inductive':
                 dev_logits = model(dev_data.x, dev_data.edge_index)
                 dev_probs = torch.sigmoid(dev_logits).view(-1)
-            elif setting == 'transductive':
+            elif setting_cond == 'transductive':
                 dev_probs = whole_probs[dev_mask].view(-1)
             dev_loss = dev_criterion(dev_probs, dev_golds)
 
@@ -145,30 +146,30 @@ def train_network(model: nn.Module,
     return train_loss_plot, dev_loss_plot
 
 
-def evaluate_model(model: nn.Module,
-                   dataset: InMemoryDataset,
-                   setting: str,
-                   thresh: float=0.9):
+def evaluate_net(model: nn.Module,
+                 dataset: InMemoryDataset,
+                 setting_cond: str,
+                 thresh: float=0.9):
     """ Generates predictions with a trained network and report various metrics
     """
     # TODO: DO LIKE IN RUN_CONTROLS WITH COMPUTATION OF BEST THRESHOLD ETC!
     # Initialize model, data and labels
     print(' - Testing model')
     model.eval()
-    if setting == 'inductive':
+    if setting_cond == 'inductive':
         test_data = dataset.get_split('dev').to(DEVICE)  # with dev for now
         test_golds = test_data.y
-    elif setting == 'transductive':
+    elif setting_cond == 'transductive':
         whole_data = dataset.get_split('whole').to(DEVICE)
         test_mask = whole_data.masks['dev']  # with dev for now
         test_golds = whole_data.y[test_mask]
 
     # Compute model predictions
     with torch.no_grad():
-        if setting == 'inductive':
+        if setting_cond == 'inductive':
             test_logits = model(test_data.x, test_data.edge_index)
             test_probs = torch.sigmoid(test_logits).view(-1)
-        elif setting == 'transductive':
+        elif setting_cond == 'transductive':
             whole_logits = model(whole_data.x, whole_data.edge_index)
             whole_preds = torch.sigmoid(whole_logits)
             test_probs = whole_preds[test_mask].view(-1)
@@ -229,7 +230,7 @@ class Net(nn.Module):
 class IPCPredict(InMemoryDataset):
     """ Dataset containing graph data, and node indices for train, dev and test
     """
-    def __init__(self, balanced_cond, link_cond, setting_cond):
+    def __init__(self, setting_cond, balanced_cond, link_cond):
         super(IPCPredict, self).__init__()
         print(' - Creating data graph')
         # Load features, labels, node ids, and initialize data
@@ -259,16 +260,16 @@ class IPCPredict(InMemoryDataset):
     
     def create_transductive_graph(self,
                                   X: dict[np.ndarray],
-                                  y: dict[pd.Series],
+                                  y: dict[pd.DataFrame],
                                   ids: dict[pd.Index],
                                   link_cond: str):
         """ Create transductive graph using nodes, node labels, node ids, and
             appends train, dev, and test masks to the graph
         """
         # Create graph using the totality of nodes, node labels, and node ids
-        X_ = np.concatenate((X['train'], X['dev'], X['test']))
-        y_ = np.concatenate((y['train'], y['dev'], y['test']))
-        ids_ = np.concatenate((ids['train'], ids['dev'], ids['test']))
+        X_ = np.concatenate((X['train'], X['dev'], X['test']))  # np.ndarray
+        y_ = pd.concat((y['train'], y['dev'], y['test']))  # pd.DataFrame
+        ids_ = ids['train'].append(ids['dev']).append(ids['test'])  # pd.Index
         pyg_graph = self.create_graph(X_, y_, ids_, link_cond)
         
         # Create masks to retrieve train, dev, and test predictions

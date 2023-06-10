@@ -471,11 +471,15 @@ def load_features_and_labels(balanced='non'):
     return X_data, y_data, id_data
 
 
-def load_edges(link_cond, node_ids=None):
+def load_edges(link_cond: str,
+               node_ids: pd.Index=None
+               ) -> pd.DataFrame:
     """ Load edges between patient-wards, given {'wards', 'caregivers', 'all'}
         condition
     """
     # Load edges and remove edges of absent nodes (e.g., for under-sampling)
+    if link_cond == 'non':
+        return pd.DataFrame.from_dict({'src': [], 'dst': []})
     edges = pd.read_csv(PATH_LINK_DICT[link_cond], index_col=[0])
     if node_ids is not None:  # remove edges that are not in node_ids
         edges = edges[edges['src'].isin(node_ids) & edges['dst'].isin(node_ids)]
@@ -496,7 +500,7 @@ def account_for_duplicate_nodes(node_ids: pd.Index, edges: pd.DataFrame):
     # Go through all duplicate nodes
     node_ids_to_add, edges_to_add = [], []
     for node_id, count in tqdm(
-            plural_node_ids.items(), total=len(plural_node_ids),
+            plural_node_ids.items(), leave=False, total=len(plural_node_ids),
             desc=' - Nodes and edges updated for over-sampling'):
         # Identify new unique ids for duplicate nodes (but keep one original)
         new_node_ids = list(range(max_node_id + 1, max_node_id + count))
