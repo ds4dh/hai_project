@@ -478,7 +478,7 @@ def load_edges(link_cond: str,
         condition
     """
     # Load edges and remove edges of absent nodes (e.g., for under-sampling)
-    if link_cond == 'non':
+    if link_cond == 'no':
         return pd.DataFrame.from_dict({'src': [], 'dst': []})
     edges = pd.read_csv(PATH_LINK_DICT[link_cond], index_col=[0])
     if node_ids is not None:  # remove edges that are not in node_ids

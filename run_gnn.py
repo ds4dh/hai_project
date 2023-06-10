@@ -25,7 +25,7 @@ N_HIDDEN = 32
 LAYER_TYPE = 'sage'  # 'gcn', 'sage', 'gat'
 SETTING_CONDS = ['inductive', 'transductive']
 BALANCED_CONDS = ['non', 'under', 'over']
-LINK_CONDS = ['all', 'wards', 'caregivers', 'non']
+LINK_CONDS = ['all', 'wards', 'caregivers', 'no']
 DATA_DIR = os.path.join('data', 'processed')
 TEST_ONLY = False
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -42,7 +42,7 @@ def main():
                                          '%s_setting' % setting_cond,
                                          '%s_balanced' % balanced_cond,
                                          'links_%s' % link_cond)
-                print('New simulation: %s setting, %s-balanced data, %s links'%
+                print('New run: %s setting, %s-balanced data, %s link(s)' %
                       (setting_cond, balanced_cond, link_cond))
                 train_model(setting_cond, balanced_cond, link_cond, ckpt_path)
                 
