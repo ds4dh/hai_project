@@ -161,6 +161,7 @@ cython_debug/
 
 # Custom
 old/*
+models/*
 data/physionet.org/*
 data/processed/*
 *.joblib
