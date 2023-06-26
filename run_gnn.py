@@ -1,8 +1,5 @@
 import os
-import numpy as np
-import pandas as pd
 import matplotlib.pyplot as plt
-import networkx as nx
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -10,13 +7,8 @@ from torch.optim.lr_scheduler import OneCycleLR
 from torch.optim import AdamW
 from torch_geometric.nn import GCNConv, GATConv, SAGEConv
 from torch_geometric.data import InMemoryDataset
-from torch_geometric.utils.convert import from_networkx
+from data.graph_utils import IPCDataset
 from sklearn.metrics import classification_report
-from data.data_utils import (
-    load_features_and_labels,
-    load_edges,
-    account_for_duplicate_nodes,
-)
 
 
 N_TRAIN_EPOCHS = 400
@@ -54,7 +46,7 @@ def train_model(setting_cond: str,
     """ Train a GNN model to predict HAI from patient nodes and worker edges
     """
     # Initialize data and model
-    dataset = IPCPredict(setting_cond, balanced_cond, link_cond)
+    dataset = IPCDataset(setting_cond, balanced_cond, link_cond)
     model = Net(dataset)
     
     # Train model if required
@@ -67,11 +59,10 @@ def train_model(setting_cond: str,
     
     # Reload checkpoint and test model
     model.load_state_dict(torch.load(ckpt_path))
-    result_text = evaluate_net(model, dataset, setting_cond)
+    report = evaluate_net(model, dataset, setting_cond)
 
     # Plot training process (if any) and testing metrics
-    result_path = ckpt_path.replace('.pt', '.png')
-    plot_model_results(train_loss_plot, dev_loss_plot, result_text, result_path)
+    save_model_results(train_loss_plot, dev_loss_plot, report, ckpt_path)
 
 
 def train_net(model: nn.Module,
@@ -182,23 +173,27 @@ def evaluate_net(model: nn.Module,
     return classification_report(test_golds, test_preds)
 
 
-def plot_model_results(train_loss_plot: list[float],
+def save_model_results(train_loss_plot: list[float],
                        dev_loss_plot: list[float],
-                       result_text: str,
-                       result_path) -> None:
+                       report: str,
+                       ckpt_path
+                       ) -> None:
     """ Plot a summary of the training process (training loss vs epoch)
     """
+    # Plot training report
+    plot_path = ''.join((os.path.splitext(ckpt_path)[0], '.png'))
     _, ax = plt.subplots(figsize=(8, 4))
     ax.plot(range(len(train_loss_plot)), train_loss_plot, label='Train loss')
     ax.plot(range(len(dev_loss_plot)), dev_loss_plot, label='Dev loss')
-    ax.text(0.95, 0.95, result_text, transform=ax.transAxes,
-            fontsize=10, verticalalignment='top', horizontalalignment='right',
-            bbox=dict(boxstyle='square', facecolor='white'))
     ax.set_xlabel('Epoch')
     ax.set_ylabel('Training loss')
     plt.legend(loc='lower left')
     plt.tight_layout()
-    plt.savefig(result_path, dpi=300)
+    plt.savefig(plot_path, dpi=150)
+    
+    # Write classification report
+    report_path = ''.join((os.path.splitext(ckpt_path)[0], '.txt'))
+    with open(report_path, 'a') as f: f.write(report)
 
 
 class Net(nn.Module):
@@ -226,84 +221,6 @@ class Net(nn.Module):
         x = self.conv2(x, edge_index)
         return x
 
-
-class IPCPredict(InMemoryDataset):
-    """ Dataset containing graph data, and node indices for train, dev and test
-    """
-    def __init__(self, setting_cond, balanced_cond, link_cond):
-        super(IPCPredict, self).__init__()
-        print(' - Creating data graph')
-        # Load features, labels, node ids, and initialize data
-        X, y, ids = load_features_and_labels(balanced_cond)
-        graph_list = []
-
-        # Create graph for a transductive setting
-        if setting_cond == 'transductive':
-            graph = self.create_transductive_graph(X, y, ids, link_cond)
-            graph_list.append(graph)
-        
-        # Create graphs for an inductive setting
-        elif setting_cond == 'inductive':
-            for split in ['train', 'dev', 'test']:
-                X_, y_, ids_ = X[split], y[split], ids[split]
-                graph = self.create_graph(X_, y_, ids_, link_cond)
-                graph_list.append(graph)
-
-        # Define splits and collate data into a nice dataset
-        self.split_indices = {'whole': 0, 'train': 0, 'dev': 1, 'test': 2}
-        self.data, self.slices = self.collate(graph_list)
-    
-    def get_split(self, name):
-        """ Workaround to get dataset splits by split name instead of indices
-        """
-        return self[self.split_indices[name]]
-    
-    def create_transductive_graph(self,
-                                  X: dict[np.ndarray],
-                                  y: dict[pd.DataFrame],
-                                  ids: dict[pd.Index],
-                                  link_cond: str):
-        """ Create transductive graph using nodes, node labels, node ids, and
-            appends train, dev, and test masks to the graph
-        """
-        # Create graph using the totality of nodes, node labels, and node ids
-        X_ = np.concatenate((X['train'], X['dev'], X['test']))  # np.ndarray
-        y_ = pd.concat((y['train'], y['dev'], y['test']))  # pd.DataFrame
-        ids_ = ids['train'].append(ids['dev']).append(ids['test'])  # pd.Index
-        pyg_graph = self.create_graph(X_, y_, ids_, link_cond)
-        
-        # Create masks to retrieve train, dev, and test predictions
-        masks = {k: torch.zeros(X_.shape[0], dtype=torch.bool)
-                 for k in ('train', 'dev', 'test')}
-        masks['train'][:len(X['train'])] = True
-        masks['dev'][len(X['train']):len(X['train']) + len(X['dev'])] = True
-        masks['test'][-len(X['test']):] = True
-        
-        # Return final graph, after adding transductive masks
-        pyg_graph.masks = masks
-        return pyg_graph
-    
-    @staticmethod
-    def create_graph(X: np.ndarray,
-                     y: pd.Series,
-                     node_ids: pd.Index,
-                     link_cond: str):
-        """ Create graph using nodes, node labels, and node ids
-        """
-        # Load edges, and update node ids and edges in case of over-sampling
-        edges = load_edges(link_cond, node_ids)
-        node_ids, edges = account_for_duplicate_nodes(node_ids, edges)
-        
-        # Initialize graph and add nodes features and labels
-        nx_graph = nx.Graph()
-        for node_id, feat, lbl in zip(node_ids, X, y):
-            node_info = {'x': feat.tolist(), 'y': float(lbl)}
-            nx_graph.add_node(node_id, **node_info)
-            
-        # Add edges and create pytorch-geometric (Data()) object from the graph
-        nx_graph.add_edges_from(edges.values)
-        return from_networkx(nx_graph)
-    
     
 if __name__ == '__main__':
     main()

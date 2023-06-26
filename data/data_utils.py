@@ -16,7 +16,6 @@ PATH_ADMISSIONS = 'data/physionet.org/files/mimiciii/1.4/ADMISSIONS.csv.gz'
 PATH_PATIENTS = 'data/physionet.org/files/mimiciii/1.4/PATIENTS.csv.gz'
 PATH_TRANSFERS = 'data/physionet.org/files/mimiciii/1.4/TRANSFERS.csv.gz'
 PATH_MICROBIOLOGY_EVENTS = 'data/physionet.org/files/mimiciii/1.4/MICROBIOLOGYEVENTS.csv.gz'
-PATH_CHART_EVENTS = 'data/physionet.org/files/mimiciii/1.4/CHARTEVENTS.csv.gz'
 
 # Output file paths (features)
 PROCESSED_DATA_DIR = os.path.join('data', 'processed')
@@ -25,14 +24,6 @@ PATH_COLONISATION_LABELS = os.path.join(PROCESSED_DATA_DIR, 'patient-ward_coloni
 PATH_DIAGNOSE_DATA = os.path.join(PROCESSED_DATA_DIR, 'patient-ward_diagnose_data.csv')
 PATH_COLUMNS_AND_LABELS = os.path.join(PROCESSED_DATA_DIR, 'patient-ward_columns_and_labels.csv')
 PATH_FEATURES_AND_LABELS = os.path.join(PROCESSED_DATA_DIR, 'patient-ward_features_and_labels.csv')
-
-# Ouput file paths (links)
-PATH_PATIENT_WARD_CAREGIVER_MAPPING = os.path.join(PROCESSED_DATA_DIR, 'patient-ward_caregiver_mapping.csv')
-PATH_LINK_DICT = {
-    'wards': os.path.join(PROCESSED_DATA_DIR, 'graph_links_wards.csv'),
-    'caregivers': os.path.join(PROCESSED_DATA_DIR, 'graph_links_caregivers.csv'),
-    'all': os.path.join(PROCESSED_DATA_DIR, 'graph_links_all.csv'),
-}
 
 # Relevant column names in various data files
 ENTEROBACTERIAE = [
@@ -75,11 +66,7 @@ NON_FEATURE_COLUMNS = [
     'DISCHTIME', 'COLONISED_DATE', 'CHARTDATE', 'INTIME', 'OUTTIME',
     'ADMITTIME', 'SUBJECT_ID', 'HADM_ID',  # 'EXPIRE_FLAG', <-- ????
 ]
-CHARTEVENT_COLUMNS = ['SUBJECT_ID', 'HADM_ID', 'CHARTTIME', 'CGID']
-CAREGIVER_COLUMNS = ['SUBJECT_ID', 'HADM_ID', 'INTIME', 'OUTTIME', 'CURR_WARDID', 'CHARTTIME', 'CGID']
-WARD_COLUMNS = ['SUBJECT_ID', 'HADM_ID', 'INTIME', 'OUTTIME', 'CURR_WARDID']
 STRING_FEATURES = ['PREV_CAREUNIT', 'CURR_CAREUNIT', 'GENDER']
-NUMERICAL_FEATURES = ['DIAG_ID', 'CURR_WARDID', 'PREV_WARDID', 'LOS', 'LOSH']
 REGENERATE_DATASET_FROM_SCRATCH = False
 
 
@@ -101,19 +88,11 @@ def main():
         add_losh_to_data()  # (274_323 x 25)
         generate_features_and_labels()  # (274_323, 12) -> 267_106 non-colonised, 7_617 colonised
         
-        # Generate graph links for graph-based algorithms
-        link_patient_wards_to_caregivers()  # (14_618_862 x 10); approx 4 hours
-        generate_caregiver_links()  # (588_390 x 2); approx. 2 minutes
-        generate_ward_links()  # (184_272 x 2); approx. 3 minutes
-        merge_ward_and_caregiver_links()  # (722_996 x 2), i.e., [src, dest]
-
     # Save different data splittings for different balanced scenarios
     for balanced_cond in ['non', 'under', 'over']:
         if 1:  # REGENERATE_DATASET_FROM_SCRATCH:
             save_data_splits(balanced_cond)
         load_features_and_labels(balanced_cond)
-    for link_cond in PATH_LINK_DICT.keys():
-        load_edges(link_cond)
 
 
 def generate_patient_colonisation_labels():
@@ -285,107 +264,6 @@ def generate_features_and_labels():
     df_features.to_csv(PATH_FEATURES_AND_LABELS, encoding='utf-8')
 
 
-def link_patient_wards_to_caregivers():
-    """ Add links between patients that were visited by the same caregiver at the same time
-    """
-    print('Linking caregivers to patient-wards')
-    # Load caregiver data
-    df_caregivers = pd.read_csv(PATH_CHART_EVENTS, usecols=CHARTEVENT_COLUMNS) # takes approx. 8 minutes (330_712_483 x 7)
-    df_caregivers['CHARTTIME'] = pd.to_datetime(df_caregivers['CHARTTIME'])
-    df_caregivers['day'] = df_caregivers['CHARTTIME'].dt.day
-    df_caregivers['month'] = df_caregivers['CHARTTIME'].dt.month
-    df_caregivers['year'] = df_caregivers['CHARTTIME'].dt.year
-
-    # Load patient-ward location data
-    df_wards = pd.read_csv(PATH_PATIENT_WARDS, usecols=WARD_COLUMNS)  # takes a few seconds (261_857 x 5)
-    df_wards['INTIME'] = pd.to_datetime(df_wards['INTIME'])
-    df_wards['OUTTIME'] = pd.to_datetime(df_wards['OUTTIME'])
-
-    # Link caregivers to patient-wards
-    df_final = pd.merge(df_caregivers, df_wards, how='left',
-                        left_on=ADMISSION_COLUMNS,  # not sure about how all these merges are done
-                        right_on=ADMISSION_COLUMNS)  # takes approx 1.8 hours (1_664_662_896 x 10)
-    df_final = df_final[(df_final['CHARTTIME'] >= df_final['INTIME']) &
-                        (df_final['CHARTTIME'] <= df_final['OUTTIME'])]  # takes approx. 2 hours (329_366_946 x 10)
-    df_final = df_final.drop_duplicates()  # takes approx. 30 minutes (14_618_862 x 10)
-    df_final.to_csv(PATH_PATIENT_WARD_CAREGIVER_MAPPING, encoding='utf-8')
-    
-
-def generate_caregiver_links():
-    """ Generate links between patients having the same caregiver simultaneously
-    """
-    print('Generating graph links using patient-caregiver data')
-    # Load patient-ward and caregiver data and merge them in a single dataframe
-    df_data = pd.read_csv(PATH_COLUMNS_AND_LABELS, usecols=WARD_COLUMNS)
-    df_data['PWARD_ID'] = df_data.index  # to keep track of row ids
-    df_ward_caregiver = pd.read_csv(PATH_PATIENT_WARD_CAREGIVER_MAPPING,
-                                    usecols=CAREGIVER_COLUMNS)
-    df_patients = pd.merge(df_ward_caregiver, df_data, how='left',  # 18M samples
-                           left_on=WARD_COLUMNS, right_on=WARD_COLUMNS)
-    
-    # Group patients by caregiver ids, only if visited on the same day
-    df_patients['CHARTTIME'] = pd.to_datetime(df_patients['CHARTTIME'])
-    df_patients['CHARTDATE'] = df_patients['CHARTTIME'].dt.date  # only day
-    used_columns = ['SUBJECT_ID', 'HADM_ID', 'PWARD_ID', 'CHARTDATE', 'CGID']
-    df_patients = df_patients.filter(items=used_columns)
-    df_patients = df_patients.drop_duplicates()  # 250k samples -> faster!
-    df_grouped = df_patients.groupby(['CHARTDATE', 'CGID'])  # 1 minute
-    
-    # Add links between patients visited by the same caregiver on the same day
-    links = set()
-    patient_dict = dict(zip(df_data['PWARD_ID'], df_data['HADM_ID']))  # useful?
-    for _, group in tqdm(df_grouped, desc='Computing links'):
-        src_patient_wards = group['PWARD_ID'].unique().tolist()
-        for src_id in src_patient_wards:
-            tgt_patient_wards = [i for i in src_patient_wards if i != src_id]
-            for tgt_id in tgt_patient_wards:
-                if patient_dict[src_id] != patient_dict[tgt_id]:  # why this????
-                    links.add(frozenset([src_id, tgt_id]))  # unordered
-
-    # Generate data file containing caregiver links
-    link_dict = {'src': [list(link)[0] for link in links],
-                 'dst': [list(link)[1] for link in links]}
-    df_caregiver_links = pd.DataFrame.from_dict(link_dict)
-    df_caregiver_links.to_csv(PATH_LINK_DICT['caregivers'])
-
-
-def generate_ward_links():
-    """ Generate links between patients that visited the same ward at the same time
-    """
-    print('Generating graph links using in-ward patient data')
-    # Load patient-ward data
-    df_data = pd.read_csv(PATH_COLUMNS_AND_LABELS, usecols=WARD_COLUMNS)
-    df_grouped = df_data.groupby('CURR_WARDID')
-
-    # Add connections between parients that visited the same room at the same time
-    links = set()
-    for group_name, group in tqdm(df_grouped, desc='Computing links'):
-        for row in tqdm(group.itertuples(), desc=' - Group %s' % group_name,
-                        leave=False, total=len(group)):
-            contact_patients = group[(group['INTIME'] < row.OUTTIME) &
-                                     (group['OUTTIME'] > row.INTIME) &
-                                     (group.index != row.Index)]
-            for contact_patient in contact_patients.index:
-                links.add(frozenset([row.Index, contact_patient]))  # unordered
-
-    # Generate data file containing ward links
-    link_dict = {'src': [list(link)[0] for link in links],
-                 'dst': [list(link)[1] for link in links]}
-    df_ward_links = pd.DataFrame.from_dict(link_dict)
-    df_ward_links.to_csv(PATH_LINK_DICT['wards'])
-    
-
-def merge_ward_and_caregiver_links():
-    """ Merge links coming from having a common ward, and having common caregivers
-    """
-    print('Generating a new set of links combining in-ward and caregiver links')
-    df_ward_links = pd.read_csv(PATH_LINK_DICT['wards'], index_col=[0])
-    df_cg_links = pd.read_csv(PATH_LINK_DICT['caregivers'], index_col=[0])
-    df_all = pd.concat([df_ward_links, df_cg_links], ignore_index=True)
-    df_all = df_all.drop_duplicates()
-    df_all.to_csv(PATH_LINK_DICT['all'])
-    
-
 def save_data_splits(balanced='non'):
     """ Save data set splits from processed dataset file
     """
@@ -469,55 +347,6 @@ def load_features_and_labels(balanced='non'):
     y_data = {'train': y_train, 'dev': y_dev, 'test': y_test}
     id_data = {'train': id_train, 'dev': id_dev, 'test': id_test}
     return X_data, y_data, id_data
-
-
-def load_edges(link_cond: str,
-               node_ids: pd.Index=None
-               ) -> pd.DataFrame:
-    """ Load edges between patient-wards, given {'wards', 'caregivers', 'all'}
-        condition
-    """
-    # Load edges and remove edges of absent nodes (e.g., for under-sampling)
-    if link_cond == 'no':
-        return pd.DataFrame.from_dict({'src': [], 'dst': []})
-    edges = pd.read_csv(PATH_LINK_DICT[link_cond], index_col=[0])
-    if node_ids is not None:  # remove edges that are not in node_ids
-        edges = edges[edges['src'].isin(node_ids) & edges['dst'].isin(node_ids)]
-    if __name__ == '__main__':
-        print('Loaded graph edges successfully: %s' % (edges.shape,))
-    return edges
-
-
-def account_for_duplicate_nodes(node_ids: pd.Index, edges: pd.DataFrame):
-    """ Update duplicate nodes with unique ids and copy edges from the original,
-        in case of over-sampling (i.e., some nodes are duplicated)
-    """
-    # Identify nodes that are not unique
-    plural_node_ids = node_ids.value_counts()
-    plural_node_ids = plural_node_ids[plural_node_ids > 1]
-    max_node_id = max(node_ids)
-        
-    # Go through all duplicate nodes
-    node_ids_to_add, edges_to_add = [], []
-    for node_id, count in tqdm(
-            plural_node_ids.items(), leave=False, total=len(plural_node_ids),
-            desc=' - Nodes and edges updated for over-sampling'):
-        # Identify new unique ids for duplicate nodes (but keep one original)
-        new_node_ids = list(range(max_node_id + 1, max_node_id + count))
-        node_ids_to_add.extend(new_node_ids)
-        max_node_id += count - 1  # count - 1 = len(new_node_ids)
-        
-        # Add new edges for updated node ids, copying original node edges
-        for new_node_id in new_node_ids:
-            new_edges = edges[(edges['src'] == node_id) |
-                              (edges['dst'] == node_id)]\
-                             .replace(node_id, new_node_id)
-            edges_to_add.append(new_edges)
-    
-    # Update and return new node_ids and edges
-    node_ids = node_ids.unique().append(pd.Index(node_ids_to_add))
-    edges = pd.concat([edges] + edges_to_add, ignore_index=True)
-    return node_ids, edges
 
 
 if __name__ == '__main__':
