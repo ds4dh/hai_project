@@ -9,6 +9,9 @@ from torch_geometric.nn import GCNConv, GATConv, SAGEConv
 from torch_geometric.data import InMemoryDataset
 from data.graph_utils import IPCDataset
 from sklearn.metrics import classification_report
+from ray import tune
+from ray.air import Checkpoint, session
+from ray.tune.schedulers import ASHAScheduler
 
 
 N_TRAIN_EPOCHS = 400
@@ -47,7 +50,7 @@ def train_model(setting_cond: str,
     """
     # Initialize data and model
     dataset = IPCDataset(setting_cond, balanced_cond, link_cond)
-    model = Net(dataset)
+    model = Net(dataset.num_features)
     
     # Train model if required
     if not TEST_ONLY:
@@ -199,20 +202,23 @@ def save_model_results(train_loss_plot: list[float],
 class Net(nn.Module):
     """ Graph neural network that takes patient network into account
     """
-    def __init__(self, dataset: InMemoryDataset):
+    def __init__(self,
+                 in_features: int,
+                 hidden_features: int=N_HIDDEN,
+                 n_heads: int=8,  # only for gat layers
+                 ) -> None:
         super(Net, self).__init__()
         if LAYER_TYPE == 'gcn':
-            self.conv1 = GCNConv(dataset.num_features, N_HIDDEN)
-            self.conv2 = GCNConv(N_HIDDEN, 1)
+            self.conv1 = GCNConv(in_features, hidden_features)
+            self.conv2 = GCNConv(hidden_features, 1)
         elif LAYER_TYPE == 'sage':
-            self.conv1 = SAGEConv(dataset.num_features, N_HIDDEN)
-            self.conv2 = SAGEConv(N_HIDDEN, 1)
+            self.conv1 = SAGEConv(in_features, hidden_features)
+            self.conv2 = SAGEConv(hidden_features, 1)
         elif LAYER_TYPE == 'gat':
-            n_heads = 8  # 1
-            assert N_HIDDEN % n_heads == 0
-            n_out = N_HIDDEN // n_heads
-            self.conv1 = GATConv(dataset.num_features, n_out, heads=n_heads)
-            self.conv2 = GATConv(N_HIDDEN, 1)
+            assert hidden_features % n_heads == 0
+            n_out = hidden_features // n_heads
+            self.conv1 = GATConv(in_features, n_out, heads=n_heads)
+            self.conv2 = GATConv(hidden_features, 1)
         self.to(DEVICE)
 
     def forward(self, x, edge_index):
