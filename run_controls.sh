@@ -7,9 +7,9 @@
 #SBATCH --output=logs/job_output_%j.txt
 #SBATCH --error=logs/job_error_%j.err
 
-REGISTRY=/opt/cluster/registry
-SIF=pytorch_23.05-py3.sif
+REGISTRY=/home/users/b/borneta/sif
+SIF=dl.sif
 IMAGE=${REGISTRY}/${SIF}
-SCRIPT=train_and_test_net.py
+SCRIPT=run_controls_test.py
 
 srun apptainer run --nv ${IMAGE} python ${SCRIPT}
