@@ -5,10 +5,13 @@ from tqdm import tqdm
 from sklearn.preprocessing import RobustScaler
 from sklearn.preprocessing import LabelEncoder
 from sklearn.model_selection import train_test_split
-
 import warnings
 from pandas.errors import DtypeWarning
 warnings.filterwarnings(action='ignore', category=DtypeWarning)
+
+# Helper function
+def ABS_JOIN(*args):
+    return os.path.abspath(os.path.join(*args))
 
 # Input file paths
 PATH_ICU_STAYS = 'data/physionet.org/files/mimiciii/1.4/ICUSTAYS.csv.gz'
@@ -18,12 +21,12 @@ PATH_TRANSFERS = 'data/physionet.org/files/mimiciii/1.4/TRANSFERS.csv.gz'
 PATH_MICROBIOLOGY_EVENTS = 'data/physionet.org/files/mimiciii/1.4/MICROBIOLOGYEVENTS.csv.gz'
 
 # Output file paths (features)
-PROCESSED_DATA_DIR = os.path.join('data', 'processed')
-PATH_PATIENT_WARDS = os.path.join(PROCESSED_DATA_DIR, 'patient-wards.csv')
-PATH_COLONISATION_LABELS = os.path.join(PROCESSED_DATA_DIR, 'patient-ward_colonisation_labels.csv')
-PATH_DIAGNOSE_DATA = os.path.join(PROCESSED_DATA_DIR, 'patient-ward_diagnose_data.csv')
-PATH_COLUMNS_AND_LABELS = os.path.join(PROCESSED_DATA_DIR, 'patient-ward_columns_and_labels.csv')
-PATH_FEATURES_AND_LABELS = os.path.join(PROCESSED_DATA_DIR, 'patient-ward_features_and_labels.csv')
+PROCESSED_DATA_DIR = ABS_JOIN('data', 'processed')
+PATH_PATIENT_WARDS = ABS_JOIN(PROCESSED_DATA_DIR, 'patient-wards.csv')
+PATH_COLONISATION_LABELS = ABS_JOIN(PROCESSED_DATA_DIR, 'patient-ward_colonisation_labels.csv')
+PATH_DIAGNOSE_DATA = ABS_JOIN(PROCESSED_DATA_DIR, 'patient-ward_diagnose_data.csv')
+PATH_COLUMNS_AND_LABELS = ABS_JOIN(PROCESSED_DATA_DIR, 'patient-ward_columns_and_labels.csv')
+PATH_FEATURES_AND_LABELS = ABS_JOIN(PROCESSED_DATA_DIR, 'patient-ward_features_and_labels.csv')
 
 # Relevant column names in various data files
 ENTEROBACTERIAE = [
@@ -294,7 +297,7 @@ def save_data_splits(balanced='non'):
     df_X.fillna(0, inplace=True)
     
     # Create data splits (-> shuffle samples, hence linked node ids and labels)
-    balanced_dir = os.path.join(PROCESSED_DATA_DIR, '%s_balanced' % balanced)
+    balanced_dir = ABS_JOIN(PROCESSED_DATA_DIR, '%s_balanced' % balanced)
     os.makedirs(balanced_dir, exist_ok=True)
     X_train, X_test, y_train, y_test = train_test_split(
         df_X, df_y, test_size=0.2, random_state=2, shuffle=True)
@@ -302,24 +305,24 @@ def save_data_splits(balanced='non'):
         X_train, y_train, test_size=0.25, random_state=2, shuffle=True)
     
     # Save features (as numpy.array)
-    X_train.to_pickle(os.path.join(balanced_dir, 'X_train.pkl'))
-    X_dev.to_pickle(os.path.join(balanced_dir, 'X_dev.pkl'))
-    X_test.to_pickle(os.path.join(balanced_dir, 'X_test.pkl'))
+    X_train.to_pickle(ABS_JOIN(balanced_dir, 'X_train.pkl'))
+    X_dev.to_pickle(ABS_JOIN(balanced_dir, 'X_dev.pkl'))
+    X_test.to_pickle(ABS_JOIN(balanced_dir, 'X_test.pkl'))
     
     # Save labels (as dataframes, to keep trak of node ids)
-    y_train.to_pickle(os.path.join(balanced_dir, 'y_train.pkl'))
-    y_dev.to_pickle(os.path.join(balanced_dir, 'y_dev.pkl'))
-    y_test.to_pickle(os.path.join(balanced_dir, 'y_test.pkl'))
+    y_train.to_pickle(ABS_JOIN(balanced_dir, 'y_train.pkl'))
+    y_dev.to_pickle(ABS_JOIN(balanced_dir, 'y_dev.pkl'))
+    y_test.to_pickle(ABS_JOIN(balanced_dir, 'y_test.pkl'))
 
 
 def load_features_and_labels(balanced='non'):
     """ Get data set splits (separate features and labels)
     """
     # Load data feature splits
-    balanced_dir = os.path.join(PROCESSED_DATA_DIR, '%s_balanced' % balanced)
-    X_train = pd.read_pickle(os.path.join(balanced_dir, 'X_train.pkl'))
-    X_dev = pd.read_pickle(os.path.join(balanced_dir, 'X_dev.pkl'))
-    X_test = pd.read_pickle(os.path.join(balanced_dir, 'X_test.pkl'))
+    balanced_dir = ABS_JOIN(PROCESSED_DATA_DIR, '%s_balanced' % balanced)
+    X_train = pd.read_pickle(ABS_JOIN(balanced_dir, 'X_train.pkl'))
+    X_dev = pd.read_pickle(ABS_JOIN(balanced_dir, 'X_dev.pkl'))
+    X_test = pd.read_pickle(ABS_JOIN(balanced_dir, 'X_test.pkl'))
     
     # Scale features (fitting scaler only with training data)
     scaler = RobustScaler().fit(X_train)  # pd.DataFrame -> np.ndarray
@@ -328,9 +331,9 @@ def load_features_and_labels(balanced='non'):
     X_test = scaler.transform(X_test)
     
     # Load labels
-    y_train = pd.read_pickle(os.path.join(balanced_dir, 'y_train.pkl'))
-    y_dev = pd.read_pickle(os.path.join(balanced_dir, 'y_dev.pkl'))
-    y_test = pd.read_pickle(os.path.join(balanced_dir, 'y_test.pkl'))
+    y_train = pd.read_pickle(ABS_JOIN(balanced_dir, 'y_train.pkl'))
+    y_dev = pd.read_pickle(ABS_JOIN(balanced_dir, 'y_dev.pkl'))
+    y_test = pd.read_pickle(ABS_JOIN(balanced_dir, 'y_test.pkl'))
 
     # Retrieve node indices
     id_train, id_dev, id_test = y_train.index, y_dev.index, y_test.index

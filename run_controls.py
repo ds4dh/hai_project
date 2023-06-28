@@ -1,9 +1,8 @@
 import os
-import numpy as np
 from joblib import dump, load
 from data.data_utils import load_features_and_labels
 from data.graph_utils import load_graph_features_and_labels
-from sklearn.metrics import classification_report, roc_auc_score, f1_score
+from run_utils import generate_report
 from sklearn.model_selection import RandomizedSearchCV
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
@@ -14,17 +13,22 @@ import warnings
 warnings.filterwarnings('ignore', category=UserWarning)
 warnings.filterwarnings('ignore', category=ConvergenceWarning)
 
+# Helper function
+def ABS_JOIN(*args):
+    return os.path.abspath(os.path.join(*args))
 
+# Run parameters
 LOAD_MODELS = False
 USE_GRAPH_FEATURES = True
+POSITIVE_ID = 1  # label id for 'infected' label
 SETTING_CONDS = ['inductive', 'transductive']  # only used if graph features
 LINK_CONDS = ['all', 'wards', 'caregivers', 'no']  # only used if graph features
 BALANCED_CONDS = ['non', 'under', 'over']
 MODELS = {
-    # 'catboost': CatBoostClassifier(verbose=False),
-    # 'knn': KNeighborsClassifier(),
+    'catboost': CatBoostClassifier(verbose=False),
+    'knn': KNeighborsClassifier(),
     'logistic_regression': LogisticRegression(verbose=False),
-    # 'random_forest': RandomForestClassifier(verbose=False),
+    'random_forest': RandomForestClassifier(verbose=False),
 }
 GRIDS = {
     'catboost': {
@@ -54,28 +58,28 @@ GRIDS = {
         'class_weight': [None, 'balanced', 'balanced_subsample'],
     },
 }
-CKPT_DIR = os.path.join('models', 'controls', 'ckpts')
-REPORT_PATH = os.path.join('models', 'controls', 'results')
+CKPT_DIR = ABS_JOIN('models', 'controls', 'ckpts')
+REPORT_PATH = ABS_JOIN('models', 'controls', 'results')
 
 
 def main():
     """ Run all models for any set of conditions, keep results in a ckpt path
     """
-    # # First use node features only
-    # for balanced_cond in BALANCED_CONDS:
-    #     for balanced_cond in BALANCED_CONDS:
-    #         ckpt_path = os.path.join('models', 'controls', 'node_features',
-    #                                  '%s_balanced' % balanced_cond)
-    #         run_all_models(ckpt_path, 'nodes', balanced_cond)
+    # First use node features only
+    for balanced_cond in BALANCED_CONDS:
+        for balanced_cond in BALANCED_CONDS:
+            ckpt_path = ABS_JOIN('models', 'controls', 'node_features',
+                                 '%s_balanced' % balanced_cond)
+            run_all_models(ckpt_path, 'nodes', balanced_cond)
                 
     # Second, use edge features only
     for setting_cond in SETTING_CONDS:
         for balanced_cond in BALANCED_CONDS:
             for link_cond in LINK_CONDS:
-                ckpt_path = os.path.join('models', 'controls', 'edge_features',
-                                         '%s_setting' % setting_cond,
-                                         '%s_balanced' % balanced_cond,
-                                         'links_%s' % link_cond)
+                ckpt_path = ABS_JOIN('models', 'controls', 'edge_features',
+                                     '%s_setting' % setting_cond,
+                                     '%s_balanced' % balanced_cond,
+                                     'links_%s' % link_cond)
                 run_all_models(ckpt_path, 'edges',
                                balanced_cond, setting_cond, link_cond)
                 
@@ -109,7 +113,7 @@ def run_one_model(model_name, model, grid, ckpt_path, feature_cond,
         X, y, _ = load_features_and_labels(balanced_cond)
     elif feature_cond == 'edges':
         X, y = load_graph_features_and_labels(setting_cond, balanced_cond, link_cond)
-                    
+        
     # Find the best set of hyperparameters or load best model
     if not LOAD_MODELS:
         print('Finding best model hyper-parameters using random search')
@@ -122,12 +126,14 @@ def run_one_model(model_name, model, grid, ckpt_path, feature_cond,
     
     # Evaluate the best model
     print('Evaluating best model with the dev and test data')
-    report = evaluate_model(model, X['dev'], y['dev'], X['test'], y['test'])
+    y_prob_dev = model.predict_proba(X['dev'])[:, POSITIVE_ID]
+    y_prob_test = model.predict_proba(X['test'])[:, POSITIVE_ID]
+    report = generate_report(y_prob_dev, y_prob_test, y['dev'], y['test'])
     write_report(report, model_name, model, ckpt_path)
     
 
 def find_best_hyperparams(X_train, y_train, model, grid,
-                          cross_val_count=5, n_jobs=None, scoring='roc_auc'):
+                          cross_val_count=5, n_jobs=-1, scoring='roc_auc'):
     """ Find best catboost model with grid-search and k-fold cross-validation,
         then train the best model with the whole data and save it
     """
@@ -135,7 +141,7 @@ def find_best_hyperparams(X_train, y_train, model, grid,
         model,
         param_distributions=grid,
         cv=cross_val_count,
-        n_jobs=n_jobs,
+        n_jobs=n_jobs,  # n_jobs = -1 will use all available CPUs
         scoring=scoring,
         error_score=0.0,  # in case of invalid combination of hyper-parameters
     )
@@ -167,44 +173,6 @@ def write_report(report, model_name, model, ckpt_path):
         f.write('Best hyperparameters: %s\n' % model.best_params_)
         f.write(report + '\n\n')
         
-        
-def evaluate_model(model, X_dev, y_dev, X_test, y_test, positive_id=1):
-    """ Evaluate a trained model using the test data, after identifying the
-        optimal threshold using the validation data
-    """
-    threshold = find_optimal_threshold(model, X_dev, y_dev)
-    y_prob_test = model.predict_proba(X_test)[:, positive_id]
-    y_pred_test = (y_prob_test >= threshold).astype(int)
-    report = classification_report(y_test, y_pred_test)
-    report += 'AUROC confidence interval: %s' % auroc_ci(y_test, y_prob_test)
-    return report
-
-
-def find_optimal_threshold(model, X_dev, y_dev, positive_id=1):
-    """ Find optimal decision threshold using the validation set
-    """
-    y_prob_dev = model.predict_proba(X_dev)[:, positive_id]
-    thresholds = np.linspace(0, 1, 100)
-    scores = []
-    for t in thresholds:
-        y_pred_dev = (y_prob_dev >= t).astype(int)
-        score = f1_score(y_dev, y_pred_dev)
-        scores.append(score)
-    return thresholds[np.argmax(scores)]
-
-
-def auroc_ci(y_true, y_score, t_value=1.96):
-    """ Compute confidence interval of auroc score using Racha's method
-    """
-    auroc = roc_auc_score(y_true, y_score)
-    n1 = sum(y_true == 1)
-    n2 = sum(y_true == 0)
-    p1 = (n1 - 1) * (auroc / (2 - auroc) - auroc ** 2)
-    p2 = (n2 - 1) * (2 * auroc ** 2 / (1 + auroc) - auroc ** 2)
-    std_auroc = ((auroc * (1 - auroc) + p1 + p2) / (n1 * n2)) ** 0.5
-    low, high = (auroc - t_value * std_auroc, auroc + t_value * std_auroc)
-    return '%.3f (%.3f, %.3f)' % (auroc, low, high)
-
 
 if __name__ == '__main__':
     main()

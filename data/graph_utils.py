@@ -14,19 +14,22 @@ from torch_geometric.data import InMemoryDataset, Data
 from torch_geometric.utils.convert import from_networkx as torch_from_networkx
 from data.data_utils import load_features_and_labels
 
+# Helper function
+def ABS_JOIN(*args):
+    return os.path.abspath(os.path.join(*args))
 
 # Input file paths
-PROCESSED_DATA_DIR = os.path.join('data', 'processed')
-PATH_CHART_EVENTS = 'data/physionet.org/files/mimiciii/1.4/CHARTEVENTS.csv.gz'
-PATH_PATIENT_WARDS = os.path.join(PROCESSED_DATA_DIR, 'patient-wards.csv')
-PATH_COLUMNS_AND_LABELS = os.path.join(PROCESSED_DATA_DIR, 'patient-ward_columns_and_labels.csv')
+PROCESSED_DATA_DIR = ABS_JOIN('data', 'processed')
+PATH_CHART_EVENTS = ABS_JOIN('data', 'physionet.org', 'files', 'mimiciii', '1.4', 'CHARTEVENTS.csv.gz')
+PATH_PATIENT_WARDS = ABS_JOIN(PROCESSED_DATA_DIR, 'patient-wards.csv')
+PATH_COLUMNS_AND_LABELS = ABS_JOIN(PROCESSED_DATA_DIR, 'patient-ward_columns_and_labels.csv')
 
 # Ouput file paths
-PATH_PATIENT_WARD_CAREGIVER_MAPPING = os.path.join(PROCESSED_DATA_DIR, 'patient-ward_caregiver_mapping.csv')
+PATH_PATIENT_WARD_CAREGIVER_MAPPING = ABS_JOIN(PROCESSED_DATA_DIR, 'patient-ward_caregiver_mapping.csv')
 PATH_LINK_DICT = {
-    'wards': os.path.join(PROCESSED_DATA_DIR, 'graph_links_wards.csv'),
-    'caregivers': os.path.join(PROCESSED_DATA_DIR, 'graph_links_caregivers.csv'),
-    'all': os.path.join(PROCESSED_DATA_DIR, 'graph_links_all.csv'),
+    'wards': ABS_JOIN(PROCESSED_DATA_DIR, 'graph_links_wards.csv'),
+    'caregivers': ABS_JOIN(PROCESSED_DATA_DIR, 'graph_links_caregivers.csv'),
+    'all': ABS_JOIN(PROCESSED_DATA_DIR, 'graph_links_all.csv'),
 }
 
 # Data features to be used to create links between patient-wards
@@ -36,6 +39,7 @@ CAREGIVER_COLUMNS = ['SUBJECT_ID', 'HADM_ID', 'INTIME', 'OUTTIME', 'CURR_WARDID'
 WARD_COLUMNS = ['SUBJECT_ID', 'HADM_ID', 'INTIME', 'OUTTIME', 'CURR_WARDID']
 REGENERATE_LINKS_FROM_SCRATCH = False
 REGENERATE_STELLAR_DATA_FROM_SCRATCH = False
+STELLAR_EMBEDDINGS_WITH_NODE_FEATURES = True
 
 
 def main():
@@ -225,9 +229,14 @@ def load_graph_features_and_labels(setting_cond, balanced_cond, link_cond):
         
 
 class IPCDataset(InMemoryDataset):
-    """ Dataset containing graph data, and node indices for train, dev and test
-    """
-    def __init__(self, setting_cond, balanced_cond, link_cond, format='torch'):
+    def __init__(self,
+                 setting_cond: str,
+                 balanced_cond: str,
+                 link_cond: str,
+                 format: str='torch'):
+        """ Dataset containing graph data, and node indices for train, dev and
+            test dataset (in case of transductive setting)
+        """
         super(IPCDataset, self).__init__()
         print(' - Creating data graph')
         # Load features, labels, node ids, and initialize data
@@ -337,12 +346,12 @@ class IPCDataset(InMemoryDataset):
                               ) -> list[np.ndarray]:
         # Initialize graph and data checkpoint path
         stellar_graph = StellarGraph.from_networkx(nx_graph)
-        pickle_path = os.path.join(PROCESSED_DATA_DIR,
-                                   '%s_balanced' % self.balanced_cond,
-                                   'stellar',
-                                   '%s_setting' % self.setting_cond,
-                                   '%s_links' % self.link_cond,
-                                   'node_embeddings_%s' % split)
+        pickle_path = ABS_JOIN(PROCESSED_DATA_DIR,
+                               '%s_balanced' % self.balanced_cond,
+                               'stellar',
+                               '%s_setting' % self.setting_cond,
+                               '%s_links' % self.link_cond,
+                               'node_embeddings_%s' % split)
         
         # Load checkpoint if data is already generated
         loading_failed = False
@@ -366,8 +375,10 @@ class IPCDataset(InMemoryDataset):
         
         # Return pyg-graph after adding node embeddings
         pyg_graph = torch_from_networkx(nx_graph)
-        pyg_graph.x = torch.from_numpy(np.stack(node_embeddings))
-        # updated_node_features = [pyg_graph.x, torch.from_numpy(node_embeddings)]
-        # pyg_graph.x = torch.cat(updated_node_features, dim=-1)
+        if STELLAR_EMBEDDINGS_WITH_NODE_FEATURES:
+            updated_node_features = [pyg_graph.x, torch.from_numpy(node_embeddings)]
+            pyg_graph.x = torch.cat(updated_node_features, dim=-1)
+        else:
+            pyg_graph.x = torch.from_numpy(np.stack(node_embeddings))
         return pyg_graph
     
