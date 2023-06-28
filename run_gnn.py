@@ -1,4 +1,5 @@
 import os
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -22,10 +23,13 @@ BALANCED_CONDS = ['non', 'under', 'over']
 LINK_CONDS = ['all', 'wards', 'caregivers', 'no']
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 SEARCH_SPACE = {
-    'hidden_dim': tune.grid_search([16, 32, 64, 128]),
+    'hidden_dim': tune.choice([16, 32, 64, 128]),
     'n_layers': tune.choice([2, 3, 4, 5]),
-    'dropout': tune.grid_search([0.0, 0.1, 0.3, 0.5]),
+    'dropout': tune.choice([0.0, 0.1, 0.3, 0.5]),
     'layer_type': tune.choice(['gcn', 'sage', 'gat']),
+    'n_heads': tune.sample_from(lambda spec:
+        None if spec.config.layer_type != 'gat'
+        else np.random.choice([4, 8, 16])),
     'lr': tune.loguniform(1e-4, 1e-1),
 }
 
@@ -46,7 +50,7 @@ def main():
                     '%s_balanced' % balanced_cond,
                     'links_%s.txt' % link_cond
                 ))
-                                
+                
                 # Define dataset and start hyper-parameter tuning
                 analysis = tune.run(
                     partial(tune_net, dataset=dataset, setting_cond=setting_cond),
@@ -63,8 +67,8 @@ def main():
                 final_report = metric['report']
                 with open(report_path, 'w') as f:
                     f.write(final_report)
-                
-                
+                    
+                    
 def tune_net(config: dict, dataset: Data, setting_cond: str) -> None:
     """ Tune hyper-parameters of a GNN for HAI prediction task
     """
@@ -76,7 +80,7 @@ def tune_net(config: dict, dataset: Data, setting_cond: str) -> None:
     # Train model and generate checkpoint (and track losses)
     train_losses, dev_losses = train_net(
         model=model,
-        dataset=dataset, 
+        dataset=dataset,
         setting_cond=setting_cond,
         optimizer=optimizer,
         scheduler=scheduler,
@@ -250,7 +254,7 @@ class Net(nn.Module):
             x = F.dropout(x, p=self.dropout, training=self.training)
         x = self.layers[-1](x, edge_index)  # last layer: no activation / dropout
         return x
-
+    
     
 if __name__ == '__main__':
     main()
