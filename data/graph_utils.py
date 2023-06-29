@@ -7,9 +7,6 @@ import pandas as pd
 import networkx as nx
 from tqdm import tqdm
 from typing import Union
-from stellargraph.data import BiasedRandomWalk
-from stellargraph import StellarGraph
-from gensim.models import Word2Vec
 from torch_geometric.data import InMemoryDataset, Data
 from torch_geometric.utils.convert import from_networkx as torch_from_networkx
 from data.data_utils import load_features_and_labels
@@ -40,6 +37,13 @@ WARD_COLUMNS = ['SUBJECT_ID', 'HADM_ID', 'INTIME', 'OUTTIME', 'CURR_WARDID']
 REGENERATE_LINKS_FROM_SCRATCH = False
 REGENERATE_STELLAR_DATA_FROM_SCRATCH = False
 STELLAR_EMBEDDINGS_WITH_NODE_FEATURES = True
+try:
+    from stellargraph.data import BiasedRandomWalk
+    from stellargraph import StellarGraph
+    from gensim.models import Word2Vec
+except ModuleNotFoundError:
+    print('Stellargraph not found. Node2Vec features must be loaded from disk.')
+    REGENERATE_STELLAR_DATA_FROM_SCRATCH = False
 
 
 def main():
@@ -272,7 +276,7 @@ class IPCDataset(InMemoryDataset):
                                   X: dict[np.ndarray],
                                   y: dict[pd.DataFrame],
                                   node_ids: dict[pd.Index],
-                                  ) -> Union[StellarGraph, Data]:
+                                  ) -> Data:
         """ Create transductive graph using nodes, node labels, node ids, and
             appends train, dev, and test masks to the graph
         """
@@ -320,7 +324,7 @@ class IPCDataset(InMemoryDataset):
             return self.create_embedded_graph(nx_graph, split)
     
     def create_random_walks(self,
-                            graph: StellarGraph,
+                            graph,
                             max_walk_length: int=32,
                             n_random_walks_per_root_node: int=10,
                             p_param: float=0.5,
@@ -344,8 +348,7 @@ class IPCDataset(InMemoryDataset):
                               dim: int=128,
                               window: int=5,
                               ) -> list[np.ndarray]:
-        # Initialize graph and data checkpoint path
-        stellar_graph = StellarGraph.from_networkx(nx_graph)
+        # Initialize data checkpoint path
         pickle_path = ABS_JOIN(PROCESSED_DATA_DIR,
                                '%s_balanced' % self.balanced_cond,
                                'stellar',
@@ -365,6 +368,7 @@ class IPCDataset(InMemoryDataset):
         # Else, regenerate node embeddings
         if REGENERATE_LINKS_FROM_SCRATCH or loading_failed:
             os.makedirs(os.path.split(pickle_path)[0], exist_ok=True)
+            stellar_graph = StellarGraph.from_networkx(nx_graph)
             walks = self.create_random_walks(stellar_graph)
             str_walks = [[str(n) for n in walk] for walk in walks]
             model = Word2Vec(str_walks, vector_size=dim, window=window, sg=1)

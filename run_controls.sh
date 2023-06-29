@@ -7,8 +7,8 @@
 #SBATCH --cpus-per-task=12
 #SBATCH --mem=32gb
 #SBATCH --time=0-24:00:00
-#SBATCH --output=logs/run_controls_%j.txt
-#SBATCH --error=logs/run_controls_%j.err
+#SBATCH --output=logs/run_controls/job_%j.txt
+#SBATCH --error=logs/run_controls/job_%j.err
 
 REGISTRY=/home/users/b/borneta/sif
 SIF=dl.sif

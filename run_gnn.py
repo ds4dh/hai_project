@@ -1,4 +1,5 @@
 import os
+import ray
 import numpy as np
 import torch
 import torch.nn as nn
@@ -22,6 +23,7 @@ SETTING_CONDS = ['inductive', 'transductive']
 BALANCED_CONDS = ['non', 'under', 'over']
 LINK_CONDS = ['all', 'wards', 'caregivers', 'no']
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+RAY_TMP_DIR = '/tmp'  # os.path.abspath(os.path.join('tmp'))
 SEARCH_SPACE = {
     'hidden_dim': tune.choice([16, 32, 64, 128]),
     'n_layers': tune.choice([2, 3, 4, 5]),
@@ -40,7 +42,8 @@ def main():
     for setting_cond in SETTING_CONDS:
         for balanced_cond in BALANCED_CONDS:
             for link_cond in LINK_CONDS:
-                # Define dataset and ckpt path, given conditions
+                # Initialize ray instance, dataset and ckpt path given conditions
+                ray.init()
                 print('New run: %s setting, %s-balanced data, %s link(s)' %
                       (setting_cond, balanced_cond, link_cond))
                 dataset = IPCDataset(setting_cond, balanced_cond, link_cond)
@@ -59,7 +62,7 @@ def main():
                     num_samples=1,  # (?)
                 )
                 
-                # Test model with best hyperparameters and write report locally
+                # Report metric for best model and shutdown ray instance
                 best_config = analysis.get_best_config(metric='auroc', mode='max')
                 model = Net(in_features=dataset.num_features, **best_config)
                 model = model.to(DEVICE)
@@ -67,8 +70,9 @@ def main():
                 final_report = metric['report']
                 with open(report_path, 'w') as f:
                     f.write(final_report)
-                    
-                    
+                ray.shutdown()
+                
+                            
 def tune_net(config: dict, dataset: Data, setting_cond: str) -> None:
     """ Tune hyper-parameters of a GNN for HAI prediction task
     """
