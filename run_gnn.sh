@@ -2,8 +2,8 @@
 
 #SBATCH --job-name=run_gnn
 #SBATCH --partition=private-teodoro-gpu
-#SBATCH --gpus=8
 #SBATCH --ntasks=1
+#SBATCH --gpus-per-task=4
 #SBATCH --cpus-per-task=12
 #SBATCH --mem=32gb
 #SBATCH --time=0-00:02:00

@@ -23,7 +23,7 @@ SETTING_CONDS = ['inductive', 'transductive']
 BALANCED_CONDS = ['non', 'under', 'over']
 LINK_CONDS = ['all', 'wards', 'caregivers', 'no']
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-RAY_TMP_DIR = '/tmp'  # os.path.abspath(os.path.join('tmp'))
+REDIS_PASSWORD = os.environ['redis_password']
 SEARCH_SPACE = {
     'hidden_dim': tune.choice([16, 32, 64, 128]),
     'n_layers': tune.choice([2, 3, 4, 5]),
@@ -43,7 +43,7 @@ def main():
         for balanced_cond in BALANCED_CONDS:
             for link_cond in LINK_CONDS:
                 # Initialize ray instance, dataset and ckpt path given conditions
-                ray.init()
+                ray.init(address='auto', _redis_password=REDIS_PASSWORD)
                 print('New run: %s setting, %s-balanced data, %s link(s)' %
                       (setting_cond, balanced_cond, link_cond))
                 dataset = IPCDataset(setting_cond, balanced_cond, link_cond)
@@ -59,7 +59,7 @@ def main():
                     partial(tune_net, dataset=dataset, setting_cond=setting_cond),
                     resources_per_trial={'cpu': N_CPUS, 'gpu': N_GPUS},
                     config=SEARCH_SPACE,
-                    num_samples=1,  # (?)
+                    num_samples=200,  # (?)
                 )
                 
                 # Report metric for best model and shutdown ray instance
@@ -70,7 +70,6 @@ def main():
                 final_report = metric['report']
                 with open(report_path, 'w') as f:
                     f.write(final_report)
-                ray.shutdown()
                 
                             
 def tune_net(config: dict, dataset: Data, setting_cond: str) -> None:
