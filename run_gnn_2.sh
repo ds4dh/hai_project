@@ -5,11 +5,7 @@
 #SBATCH --partition=private-teodoro-gpu
 #SBATCH --output=/home/users/b/borneta/hai_project/logs/run_gnn/job_%j.txt
 #SBATCH --error=/home/users/b/borneta/hai_project/logs/run_gnn/job_%j.err
-
-#SBATCH -C gpu
-#SBATCH --time=00:10:00
-#SBATCH -q debug
-#SBATCH -A nstaff
+#SBATCH --time=1-00:00:00
 
 ### This script works for any number of nodes, Ray will find and manage all resources
 #SBATCH --nodes=1
