@@ -1,3 +1,6 @@
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
 import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.metrics import (
@@ -7,6 +10,16 @@ from sklearn.metrics import (
     roc_auc_score,
     classification_report,
 )
+
+
+def generate_minimal_report(y_true, y_score, threshold=0.5):
+    """ Evaluate a trained model using some data
+    """
+    y_pred = (y_score >= threshold).astype(int)
+    report = '\n*** Using threshold = %s ***\n' % threshold
+    report += classification_report(y_true, y_pred, zero_division=0)
+    report += '\n*** AUROC-CI = %s ***\n' % auroc_ci(y_true, y_score)
+    return report
 
 
 def generate_report(y_prob_dev, y_prob_test, y_dev, y_test):
@@ -68,3 +81,19 @@ def plot_roc_curve(y_true, y_scores):
     plt.title('Receiver Operating Characteristic Example')
     plt.legend(loc='lower right')
     return fig
+
+
+class FocalLoss(nn.Module):
+    def __init__(self, alpha=0.25, gamma=2.0, weight=None):
+        super().__init__()
+        self.alpha = alpha
+        self.gamma = gamma
+        self.weight = weight
+
+    def forward(self, inputs, targets):
+        BCE_loss = F.binary_cross_entropy_with_logits(
+            inputs, targets, weight=self.weight, reduction='none')
+        exp_loss = torch.exp(-BCE_loss)  # prevents nans when probability 0
+        focal_loss = self.alpha * (1 - exp_loss)**self.gamma * BCE_loss
+        return focal_loss.mean()
+    
