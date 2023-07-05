@@ -5,7 +5,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import pytorch_lightning as pl  # lightning.pytorch as pl
-from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning.callbacks.early_stopping import EarlyStopping
 from pytorch_lightning.loggers import TensorBoardLogger
 from torch.optim.lr_scheduler import OneCycleLR
@@ -60,7 +59,7 @@ def main():
                     study_name='run_gnn_pl',
                     direction='maximize',
                     pruner=optuna.pruners.MedianPruner(n_warmup_steps=50),
-                    sampler=optuna.samplers.TPESampler()
+                    sampler=optuna.samplers.TPESampler(),
                 )
                 optuna.pruners.SuccessiveHalvingPruner()
                 study.optimize(objective, n_trials=100, n_jobs=1)
@@ -84,7 +83,7 @@ def tune_net(trial: optuna.trial.Trial,
     """
     # Initialize pytorch-lightning instance (model, data, optimizer, scheduler)
     config = {
-        'hidden_dim': trial.suggest_categorical('hidden_dim', [16, 32, 64, 128]),
+        'hidden_dim': trial.suggest_categorical('hidden_dim', [32, 64, 128, 256, 512]),
         'n_layers': trial.suggest_categorical('n_layers', [2, 3, 4, 5]),
         'layer': trial.suggest_categorical('layer', ['gcn', 'sage', 'gat']),
         'dropout': trial.suggest_categorical('dropout', [0.0, 0.1, 0.3, 0.5]),

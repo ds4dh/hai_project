@@ -1,9 +1,11 @@
 import os
-from joblib import dump, load
+import numpy as np
+import optuna
+from functools import partial
 from data.data_utils import load_features_and_labels
 from data.graph_utils import load_graph_features_and_labels
-from run_utils import generate_report
-from sklearn.model_selection import RandomizedSearchCV
+from run_utils import generate_minimal_report
+from sklearn.metrics import roc_auc_score
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.neighbors import KNeighborsClassifier
@@ -25,23 +27,12 @@ SETTING_CONDS = ['inductive', 'transductive']  # only used if graph features
 LINK_CONDS = ['all', 'wards', 'caregivers', 'no']  # only used if graph features
 BALANCED_CONDS = ['non', 'under', 'over']
 MODELS = {
-    'catboost': CatBoostClassifier(verbose=False),
-    'knn': KNeighborsClassifier(),
-    'logistic_regression': LogisticRegression(verbose=False),
-    'random_forest': RandomForestClassifier(verbose=False),
+    'logistic_regression': LogisticRegression,
+    'random_forest': RandomForestClassifier,
+    'catboost': CatBoostClassifier,
+    'knn': KNeighborsClassifier,
 }
 GRIDS = {
-    'catboost': {
-        'depth': [5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
-        'learning_rate': [0.010, 0.025, 0.050, 0.075, 0.100],
-        'iterations': [1000, 1500, 2000, 2500, 3000, 3500],
-    },
-    'knn': {
-        'n_neighbors': list(range(1, 30)),
-        'weights': ['uniform', 'distance'],
-        'p': [1, 2, 3, 4],
-        'algorithm': ['auto', 'ball_tree', 'kd_tree', 'brute'],
-    },
     'logistic_regression': {
         'solver': ['newton-cg', 'lbfgs', 'liblinear', 'sag', 'saga'],
         'C': [0.0, 0.01, 0.1, 1, 10, 100, 200, 1000],
@@ -57,6 +48,17 @@ GRIDS = {
         'n_estimators': [1, 10, 50, 100, 1000],
         'class_weight': [None, 'balanced', 'balanced_subsample'],
     },
+    'catboost': {
+        'depth': [5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
+        'learning_rate': [0.010, 0.025, 0.050, 0.075, 0.100],
+        'iterations': [1000, 1500, 2000, 2500, 3000, 3500],
+    },
+    'knn': {
+        'n_neighbors': list(range(1, 30)),
+        'weights': ['uniform', 'distance'],
+        'p': [1, 2, 3, 4],
+        'algorithm': ['auto', 'ball_tree', 'kd_tree', 'brute'],
+    },
 }
 CKPT_DIR = ABS_JOIN('models', 'controls', 'ckpts')
 REPORT_PATH = ABS_JOIN('models', 'controls', 'results')
@@ -67,11 +69,11 @@ def main():
     """
     # First use node features only
     for balanced_cond in BALANCED_CONDS:
-        for balanced_cond in BALANCED_CONDS:
-            ckpt_path = ABS_JOIN('models', 'controls', 'node_features',
-                                 '%s_balanced' % balanced_cond)
-            run_all_models(ckpt_path, 'nodes', balanced_cond)
-                
+        ckpt_path = ABS_JOIN('models', 'controls', 'node_features',
+                                '%s_balanced' % balanced_cond)
+        os.makedirs(os.path.split(ckpt_path)[0], exist_ok=True)
+        run_all_models(ckpt_path, 'nodes', balanced_cond)
+            
     # Second, use edge features only
     for setting_cond in SETTING_CONDS:
         for balanced_cond in BALANCED_CONDS:
@@ -80,6 +82,7 @@ def main():
                                      '%s_setting' % setting_cond,
                                      '%s_balanced' % balanced_cond,
                                      'links_%s' % link_cond)
+                os.makedirs(os.path.split(ckpt_path)[0], exist_ok=True)
                 run_all_models(ckpt_path, 'edges',
                                balanced_cond, setting_cond, link_cond)
                 
@@ -95,16 +98,14 @@ def run_all_models(ckpt_path: str,
     print('New run: %s features, %s setting, %s-balanced data, %s link(s)' %
           (feat_cond, setting_cond, balanced_cond, link_cond))
     for model_name in MODELS.keys():
-        model = MODELS[model_name]
-        grid = GRIDS[model_name]
         print('\nNow running %s algorithm' % model_name)
-        run_one_model(model_name, model, grid, ckpt_path, feat_cond,
-                      balanced_cond, setting_cond, link_cond)
+        run_one_model(model_name, ckpt_path, feat_cond, balanced_cond,
+                      setting_cond, link_cond)
     print('\nAll models were run!\n')
     
 
-def run_one_model(model_name, model, grid, ckpt_path, feature_cond,
-                  balanced_cond, setting_cond=None, link_cond=None):
+def run_one_model(model_name, ckpt_path, feature_cond, balanced_cond,
+                  setting_cond=None, link_cond=None):
     """ Train and test one model, after hyper-parameter grid search
     """
     # Load the correct set of data samples
@@ -115,62 +116,62 @@ def run_one_model(model_name, model, grid, ckpt_path, feature_cond,
         X, y = load_graph_features_and_labels(setting_cond, balanced_cond, link_cond)
         
     # Find the best set of hyperparameters or load best model
-    if not LOAD_MODELS:
-        print('Finding best model hyper-parameters using random search')
-        model = find_best_hyperparams(X['train'], y['train'], model, grid)
-        os.makedirs(os.path.split(ckpt_path)[0], exist_ok=True)
-        save_model(model, ckpt_path)
-    else:
-        print('Loading model from best model checkpoint path')
-        model = load_model(ckpt_path)
+    print('Finding best model hyper-parameters using random search')
+    objective = partial(tune_model, X=X, y=y, model_name=model_name)  # error_score=0.0)
+    study = optuna.create_study(
+        study_name='run_gnn_pl',
+        direction='maximize',
+        pruner=optuna.pruners.MedianPruner(n_warmup_steps=50),
+        sampler=optuna.samplers.TPESampler(),
+    )
+    optuna.pruners.SuccessiveHalvingPruner()
+    study.optimize(objective, n_trials=100, n_jobs=1)
+    fig = optuna.visualization.plot_contour(study)
+    fig.write_image(ckpt_path + '_' + model_name + '.png')
     
-    # Evaluate the best model
-    print('Evaluating best model with the dev and test data')
-    y_prob_dev = model.predict_proba(X['dev'])[:, POSITIVE_ID]
+    # Re-train and evaluate the best model
+    best_params = study.best_trial.params
+    model = MODELS[model_name](**best_params)
+    model.fit(X['train'], y['train'])  # add dev data here?
     y_prob_test = model.predict_proba(X['test'])[:, POSITIVE_ID]
-    report = generate_report(y_prob_dev, y_prob_test, y['dev'], y['test'])
-    write_report(report, model_name, model, ckpt_path)
+    report = generate_minimal_report(y['test'], y_prob_test)
+    write_report(report, model_name, best_params, ckpt_path)
     
 
-def find_best_hyperparams(X_train, y_train, model, grid,
-                          cross_val_count=5, n_jobs=-1, scoring='roc_auc'):
+def tune_model(trial: optuna.trial.Trial,
+               X: np.array,
+               y: np.array,
+               model_name: str,
+               ) -> float:
     """ Find best catboost model with grid-search and k-fold cross-validation,
         then train the best model with the whole data and save it
     """
-    random_search = RandomizedSearchCV(
-        model,
-        param_distributions=grid,
-        cv=cross_val_count,
-        n_jobs=n_jobs,  # n_jobs = -1 will use all available CPUs
-        scoring=scoring,
-        error_score=0.0,  # in case of invalid combination of hyper-parameters
-    )
-    model = random_search.fit(X_train, y_train)
-    return model
-
-
-def save_model(model, ckpt_path):
-    """ Create checkpoint and save trained model
-    """
-    os.makedirs(os.path.split(ckpt_path)[0], exist_ok=True)
-    dump(model, ckpt_path)
-
-
-def load_model(ckpt_path):
-    """ Load trained model from existing checkpoint
-    """
-    model = load(ckpt_path)
-    return model
+    # Define model with suggested parameters
+    model_params = {k: trial.suggest_categorical(k, v)
+                    for k, v in GRIDS[model_name].items()}
+    try:
+        model = MODELS[model_name](**model_params, verbose=False)
+    except:
+        model = MODELS[model_name](**model_params)
+    
+    # Train model and return auroc computed with the validation set
+    try:
+        model.fit(X['train'], y['train'])
+        y_prob_dev = model.predict_proba(X['dev'])[:, POSITIVE_ID]
+        roc_auc = roc_auc_score(y['dev'], y_prob_dev)
+    except:
+        roc_auc = 0.0  # error score (since auroc should be big)
+    return roc_auc
     
 
-def write_report(report, model_name, model, ckpt_path):
+def write_report(report, model_name, best_params, ckpt_path):
     """ Write classification report (micro/macro precision/recall/f1-score)
     """
-    report_path = ''.join((os.path.splitext(ckpt_path)[0], '.txt'))
+    report_path = ckpt_path + '.txt'
     with open(report_path, 'a') as f:
         print('Writing result report to %s' % report_path)
         f.write('Results for %s\n' % model_name)
-        f.write('Best hyperparameters: %s\n' % model.best_params_)
+        f.write('Best hyperparameters: %s\n' % best_params)
         f.write(report + '\n\n')
         
 
