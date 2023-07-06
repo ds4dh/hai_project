@@ -28,14 +28,13 @@ BALANCED_CONDS = ['non', 'under', 'over']
 LINK_CONDS = ['all', 'wards', 'caregivers', 'no']
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
 N_GPUS = torch.cuda.device_count()
-N_CPUS = os.cpu_count() - 2
+N_CPUS = os.cpu_count() // 2 - 1
 N_DEVICES = N_GPUS if DEVICE == 'cuda' else N_CPUS
 
 
 def main():
     """ Train a GNN in different settings, data balance and link conditions
     """
-    # torch.set_float32_matmul_precision('medium')
     for setting_cond in SETTING_CONDS:
         for balanced_cond in BALANCED_CONDS:
             for link_cond in LINK_CONDS:
@@ -62,7 +61,7 @@ def main():
                     sampler=optuna.samplers.TPESampler(),
                 )
                 optuna.pruners.SuccessiveHalvingPruner()
-                study.optimize(objective, n_trials=100, n_jobs=1)
+                study.optimize(objective, n_trials=100, n_jobs=N_CPUS)
                 
                 # Load the best model and report best metric
                 best_params = study.best_trial.params

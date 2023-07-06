@@ -6,7 +6,6 @@ import numpy as np
 import pandas as pd
 import networkx as nx
 from tqdm import tqdm
-from typing import Union
 from torch_geometric.data import InMemoryDataset, Data
 from torch_geometric.utils.convert import from_networkx as torch_from_networkx
 from data.data_utils import load_features_and_labels
@@ -42,7 +41,7 @@ try:
     from stellargraph import StellarGraph
     from gensim.models import Word2Vec
 except ModuleNotFoundError:
-    print('Stellargraph not found. Node2Vec features must be loaded from disk.')
+    print('Stellargraph not found. Loading Node2Vec features from disk.')
     REGENERATE_STELLAR_DATA_FROM_SCRATCH = False
 
 
@@ -380,9 +379,9 @@ class IPCDataset(InMemoryDataset):
         # Return pyg-graph after adding node embeddings
         pyg_graph = torch_from_networkx(nx_graph)
         if STELLAR_EMBEDDINGS_WITH_NODE_FEATURES:
-            updated_node_features = [pyg_graph.x, torch.from_numpy(node_embeddings)]
+            updated_node_features = [pyg_graph.x, torch.tensor(node_embeddings)]
             pyg_graph.x = torch.cat(updated_node_features, dim=-1)
         else:
-            pyg_graph.x = torch.from_numpy(np.stack(node_embeddings))
+            pyg_graph.x = torch.tensor(node_embeddings)
         return pyg_graph
     

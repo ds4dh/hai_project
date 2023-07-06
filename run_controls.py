@@ -20,8 +20,7 @@ def ABS_JOIN(*args):
     return os.path.abspath(os.path.join(*args))
 
 # Run parameters
-LOAD_MODELS = False
-USE_GRAPH_FEATURES = True
+N_CPUS = os.cpu_count() // 2 - 1
 POSITIVE_ID = 1  # label id for 'infected' label
 SETTING_CONDS = ['inductive', 'transductive']  # only used if graph features
 LINK_CONDS = ['all', 'wards', 'caregivers', 'no']  # only used if graph features
@@ -60,8 +59,6 @@ GRIDS = {
         'algorithm': ['auto', 'ball_tree', 'kd_tree', 'brute'],
     },
 }
-CKPT_DIR = ABS_JOIN('models', 'controls', 'ckpts')
-REPORT_PATH = ABS_JOIN('models', 'controls', 'results')
 
 
 def main():
@@ -70,7 +67,7 @@ def main():
     # First use node features only
     for balanced_cond in BALANCED_CONDS:
         ckpt_path = ABS_JOIN('models', 'controls', 'node_features',
-                                '%s_balanced' % balanced_cond)
+                             '%s_balanced' % balanced_cond)
         os.makedirs(os.path.split(ckpt_path)[0], exist_ok=True)
         run_all_models(ckpt_path, 'nodes', balanced_cond)
             
@@ -125,7 +122,7 @@ def run_one_model(model_name, ckpt_path, feature_cond, balanced_cond,
         sampler=optuna.samplers.TPESampler(),
     )
     optuna.pruners.SuccessiveHalvingPruner()
-    study.optimize(objective, n_trials=100, n_jobs=1)
+    study.optimize(objective, n_trials=100, n_jobs=N_CPUS)
     fig = optuna.visualization.plot_contour(study)
     fig.write_image(ckpt_path + '_' + model_name + '.png')
     
