@@ -28,7 +28,7 @@ BALANCED_CONDS = ['non', 'under', 'over']
 LINK_CONDS = ['all', 'wards', 'caregivers', 'no']
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
 N_GPUS = torch.cuda.device_count()
-N_CPUS = os.cpu_count() // 2 - 1
+N_CPUS = 1  # os.cpu_count() // 2 - 1  # -> 1, else GPU goes OOM
 N_DEVICES = N_GPUS if DEVICE == 'cuda' else N_CPUS
 
 
@@ -62,6 +62,8 @@ def main():
                 )
                 optuna.pruners.SuccessiveHalvingPruner()
                 study.optimize(objective, n_trials=100, n_jobs=N_CPUS)
+                fig = optuna.visualization.plot_contour(study)
+                fig.write_image(os.path.join(logdir, 'visualization.png'))
                 
                 # Load the best model and report best metric
                 best_params = study.best_trial.params
@@ -88,6 +90,7 @@ def tune_net(trial: optuna.trial.Trial,
         'dropout': trial.suggest_categorical('dropout', [0.0, 0.1, 0.3, 0.5]),
         'n_heads': trial.suggest_categorical('n_heads', [4, 8, 16]),
         'lr': trial.suggest_float('lr', 1e-3, 1e-0, log=True),
+        'w_balance': trial.suggest_float('w_balance', 1e1, 1e3, log=True),
     }
     pl_model = PLWrapperNet(config, dataset, setting_cond)
     trainer = train_model(pl_model, logdir, trial)
@@ -135,7 +138,7 @@ class PLWrapperNet(pl.LightningModule):
         self.setting_cond = setting_cond
         self.dataset = dataset
         self.net = Net(dataset.num_features, **config)
-        self.criterions = self.init_criterions()
+        self.criterions = self.init_criterions(config['w_balance'])
         
     def forward(self, batch):
         """ Process nodes and edges to node infection probability
@@ -213,7 +216,7 @@ class PLWrapperNet(pl.LightningModule):
         """
         return self.get_dataloader('test')
     
-    def init_criterions(self, loss_type='focal'):
+    def init_criterions(self, w_balance, loss_type='focal'):
         """ Initialize class-weighted train and dev criterion (better way?)
         """
         # Get train and dev labels
@@ -226,7 +229,7 @@ class PLWrapperNet(pl.LightningModule):
             y_dev = whole_data.y[whole_data.masks['dev']]
         
         # Create train and dev balanced weights
-        w_balance = ((y_train == 0).sum() / (y_train == 1).sum()).item()
+        # w_balance = ((y_train == 0).sum() / (y_train == 1).sum()).item()
         w_train = torch.tensor([1 if g == 0 else w_balance for g in y_train])
         w_dev = torch.tensor([1 if g == 0 else w_balance for g in y_dev])
         

@@ -114,7 +114,7 @@ def run_one_model(model_name, ckpt_path, feature_cond, balanced_cond,
         
     # Find the best set of hyperparameters or load best model
     print('Finding best model hyper-parameters using random search')
-    objective = partial(tune_model, X=X, y=y, model_name=model_name)  # error_score=0.0)
+    objective = partial(tune_model, X=X, y=y, model_name=model_name)
     study = optuna.create_study(
         study_name='run_control_pl',
         direction='maximize',
