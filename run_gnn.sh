@@ -11,7 +11,7 @@
 #SBATCH --error=/home/users/b/borneta/hai_project/logs/run_gnn/job_%j.err
 
 REGISTRY=/home/users/b/borneta/sif
-SIF=dl.sif
+SIF=torch-image.sif
 IMAGE=${REGISTRY}/${SIF}
 SCRIPT=run_gnn.py
 

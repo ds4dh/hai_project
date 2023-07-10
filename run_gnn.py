@@ -11,7 +11,7 @@ from torch.optim.lr_scheduler import OneCycleLR
 from torch.optim import AdamW
 from torch.utils.data import DataLoader
 from torch_geometric.nn import GCNConv, GATConv, SAGEConv
-from torch_geometric.data import Data
+from torch_geometric.data import Data 
 from data.graph_utils import IPCDataset
 from optuna.integration import PyTorchLightningPruningCallback as PLPruningCallback
 from functools import partial
@@ -24,7 +24,7 @@ filterwarnings('ignore', category=RuntimeWarning, module='pytorch_lightning')
 
 N_TRAIN_EPOCHS = 500
 SETTING_CONDS = ['inductive', 'transductive']
-BALANCED_CONDS = ['non', 'under', 'over']
+BALANCED_CONDS = ['over', 'non', 'under']
 LINK_CONDS = ['all', 'wards', 'caregivers', 'no']
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
 N_GPUS = torch.cuda.device_count()
