@@ -11,7 +11,7 @@ from torch.optim.lr_scheduler import OneCycleLR
 from torch.optim import AdamW
 from torch.utils.data import DataLoader
 from torch_geometric.nn import GCNConv, GATConv, SAGEConv
-from torch_geometric.data import Data 
+from torch_geometric.data import Data
 from data.graph_utils import IPCDataset
 from optuna.integration import PyTorchLightningPruningCallback as PLPruningCallback
 from functools import partial
