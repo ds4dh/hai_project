@@ -123,8 +123,8 @@ def run_one_model(model_name, ckpt_path, feature_cond, balanced_cond,
     )
     optuna.pruners.SuccessiveHalvingPruner()
     study.optimize(objective, n_trials=100, n_jobs=N_CPUS)
-    fig = optuna.visualization.plot_contour(study)
-    fig.write_image(ckpt_path + '_' + model_name + '.png')
+    # fig = optuna.visualization.plot_contour(study)
+    # fig.write_image(ckpt_path + '_' + model_name + '.png')
     
     # Re-train and evaluate the best model
     best_params = study.best_trial.params

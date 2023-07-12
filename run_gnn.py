@@ -61,9 +61,9 @@ def main():
                     sampler=optuna.samplers.TPESampler(),
                 )
                 optuna.pruners.SuccessiveHalvingPruner()
-                study.optimize(objective, n_trials=500, n_jobs=N_CPUS)
-                fig = optuna.visualization.plot_contour(study)
-                fig.write_image(os.path.join(logdir, 'visualization.png'))
+                study.optimize(objective, n_trials=100, n_jobs=N_CPUS)
+                # fig = optuna.visualization.plot_contour(study)
+                # fig.write_image(os.path.join(logdir, 'visualization.png'))
                 
                 # Load the best model and report best metric
                 best_params = study.best_trial.params
@@ -83,8 +83,9 @@ def tune_net(trial: optuna.trial.Trial,
     """ Tune hyper-parameters of a GNN for HAI prediction task
     """
     # Initialize pytorch-lightning instance (model, data, optimizer, scheduler)
+    torch.set_float32_matmul_precision('medium')
     config = {
-        'hidden_dim': trial.suggest_categorical('hidden_dim', [32, 64, 128, 256, 512]),
+        'hidden_dim': trial.suggest_categorical('hidden_dim', [32, 64, 128]),  #, 256, 512]),
         'n_layers': trial.suggest_categorical('n_layers', [2, 3, 4, 5]),
         'layer': trial.suggest_categorical('layer', ['gcn', 'sage', 'gat']),
         'dropout': trial.suggest_categorical('dropout', [0.0, 0.1, 0.3, 0.5]),
