@@ -122,7 +122,7 @@ def run_one_model(model_name, ckpt_path, feature_cond, balanced_cond,
         sampler=optuna.samplers.TPESampler(),
     )
     optuna.pruners.SuccessiveHalvingPruner()
-    study.optimize(objective, n_trials=100, n_jobs=N_CPUS)
+    study.optimize(objective, n_trials=500, n_jobs=N_CPUS)
     # fig = optuna.visualization.plot_contour(study)
     # fig.write_image(ckpt_path + '_' + model_name + '.png')
     

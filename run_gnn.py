@@ -61,7 +61,7 @@ def main():
                     sampler=optuna.samplers.TPESampler(),
                 )
                 optuna.pruners.SuccessiveHalvingPruner()
-                study.optimize(objective, n_trials=100, n_jobs=N_CPUS)
+                study.optimize(objective, n_trials=500, n_jobs=N_CPUS)
                 # fig = optuna.visualization.plot_contour(study)
                 # fig.write_image(os.path.join(logdir, 'visualization.png'))
                 
