@@ -23,7 +23,7 @@ filterwarnings('ignore', category=RuntimeWarning, module='pytorch_lightning')
 
 
 N_TRAIN_EPOCHS = 500
-SETTING_CONDS = ['inductive', 'transductive']
+SETTING_CONDS = ['transductive', 'inductive']
 BALANCED_CONDS = ['over', 'non', 'under']
 LINK_CONDS = ['all', 'wards', 'caregivers', 'no']
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -61,7 +61,7 @@ def main():
                     sampler=optuna.samplers.TPESampler(),
                 )
                 optuna.pruners.SuccessiveHalvingPruner()
-                study.optimize(objective, n_trials=100, n_jobs=N_CPUS)
+                study.optimize(objective, n_trials=500, n_jobs=N_CPUS)
                 fig = optuna.visualization.plot_contour(study)
                 fig.write_image(os.path.join(logdir, 'visualization.png'))
                 
@@ -143,20 +143,20 @@ class PLWrapperNet(pl.LightningModule):
     def forward(self, batch):
         """ Process nodes and edges to node infection probability
         """
-        logits = self.net(batch.x, batch.edge_index)
+        y_logits = self.net(batch.x, batch.edge_index)
         if self.setting_cond == 'transductive':
-            logits = logits[batch.mask]
-        probs = torch.sigmoid(logits).view(-1)
-        return probs
+            y_logits = y_logits[batch.mask]
+        y_probs = torch.sigmoid(y_logits).view(-1)
+        return y_probs
     
     def compute_loss(self, batch, split):
         """ Compute loss for train or dev step
         """
-        probs = self.forward(batch)
-        golds = batch.y
+        y_prob = self.forward(batch)
+        y_true = batch.y
         if self.setting_cond == 'transductive':
-            golds = golds[batch.mask]
-        return self.criterions[split](probs, golds)
+            y_true = y_true[batch.mask]
+        return self.criterions[split](y_prob, y_true)
     
     def training_step(self, batch, batch_idx):
         """ Training step using either inductive or transductive setting
@@ -180,8 +180,11 @@ class PLWrapperNet(pl.LightningModule):
     def evaluate_net(self, batch):
         """ Final evaluation of fine-tuned and trained model
         """
-        y_true = batch.y.cpu().numpy()
         y_prob = self.forward(batch).cpu().numpy()
+        y_true = batch.y
+        if self.setting_cond == 'transductive':
+            y_true = y_true[batch.mask]
+        y_true = y_true.cpu().numpy()
         report = generate_minimal_report(y_true, y_prob)
         auroc = roc_auc_score(y_true, y_prob)
         return {'report': report, 'auroc': auroc}
