@@ -52,8 +52,10 @@ def main():
                 os.makedirs(logdir)
                 
                 # Define dataset and start hyper-parameter tuning
-                objective = partial(tune_net, dataset=dataset,
-                                    setting_cond=setting_cond, logdir=logdir)
+                objective = partial(
+                    tune_net, dataset=dataset, balanced_cond=balanced_cond,
+                    setting_cond=setting_cond, logdir=logdir,
+                )
                 study = optuna.create_study(
                     study_name='run_gnn_pl',
                     direction='maximize',
@@ -77,17 +79,25 @@ def main():
                     
 def tune_net(trial: optuna.trial.Trial,
              dataset: Data,
+             balanced_cond: str,
              setting_cond: str,
              logdir: str,
              ) -> float:
     """ Tune hyper-parameters of a GNN for HAI prediction task
     """
     # Initialize pytorch-lightning instance (model, data, optimizer, scheduler)
-    torch.set_float32_matmul_precision('medium')
+    if balanced_cond == 'over':  # avoid OOM
+        torch.set_float32_matmul_precision('medium')
+        hidden_dim_choice = [32, 64, 128, 256]  # [32, 64, 128]
+        layer_choice = ['gcn', 'sage']
+    else:  # try more parameters
+        torch.set_float32_matmul_precision('high')
+        hidden_dim_choice = [32, 64, 128, 256]
+        layer_choice = ['gcn', 'sage', 'gat']
     config = {
-        'hidden_dim': trial.suggest_categorical('hidden_dim', [32, 64, 128]),  #, 256, 512]),
+        'hidden_dim': trial.suggest_categorical('hidden_dim', hidden_dim_choice),
         'n_layers': trial.suggest_categorical('n_layers', [2, 3, 4, 5]),
-        'layer': trial.suggest_categorical('layer', ['gcn', 'sage', 'gat']),
+        'layer': trial.suggest_categorical('layer', layer_choice),
         'dropout': trial.suggest_categorical('dropout', [0.0, 0.1, 0.3, 0.5]),
         'n_heads': trial.suggest_categorical('n_heads', [4, 8, 16]),
         'lr': trial.suggest_float('lr', 1e-3, 1e-0, log=True),
