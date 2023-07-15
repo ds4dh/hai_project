@@ -6,7 +6,7 @@
 #SBATCH --gpus-per-task=1
 #SBATCH --cpus-per-task=1
 #SBATCH --mem=32gb
-#SBATCH --time=0-12:00:00
+#SBATCH --time=6-00:00:00
 #SBATCH --output=/home/users/b/borneta/hai_project/logs/run_gnn/job_%j.txt
 #SBATCH --error=/home/users/b/borneta/hai_project/logs/run_gnn/job_%j.err
 

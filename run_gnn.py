@@ -23,8 +23,8 @@ filterwarnings('ignore', category=RuntimeWarning, module='pytorch_lightning')
 
 
 N_TRAIN_EPOCHS = 500
-SETTING_CONDS = ['transductive', 'inductive']
-BALANCED_CONDS = ['over', 'non', 'under']
+SETTING_CONDS = ['inductive', 'transductive']
+BALANCED_CONDS = ['under', 'non', 'over']
 LINK_CONDS = ['all', 'wards', 'caregivers', 'no']
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
 N_GPUS = torch.cuda.device_count()
@@ -88,7 +88,7 @@ def tune_net(trial: optuna.trial.Trial,
     # Initialize pytorch-lightning instance (model, data, optimizer, scheduler)
     if balanced_cond == 'over':  # avoid OOM
         torch.set_float32_matmul_precision('medium')
-        hidden_dim_choice = [32, 64, 128, 256]  # [32, 64, 128]
+        hidden_dim_choice = [32, 64, 128]  # [32, 64, 128]
         layer_choice = ['gcn', 'sage']
     else:  # try more parameters
         torch.set_float32_matmul_precision('high')
