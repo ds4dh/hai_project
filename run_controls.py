@@ -1,4 +1,5 @@
 import os
+import json
 import numpy as np
 import optuna
 from functools import partial
@@ -20,11 +21,11 @@ def ABS_JOIN(*args):
     return os.path.abspath(os.path.join(*args))
 
 # Run parameters
-N_CPUS = os.cpu_count() // 2 - 1
+N_CPUS = 12
 POSITIVE_ID = 1  # label id for 'infected' label
 SETTING_CONDS = ['inductive', 'transductive']  # only used if graph features
 LINK_CONDS = ['all', 'wards', 'caregivers', 'no']  # only used if graph features
-BALANCED_CONDS = ['non', 'under', 'over']
+BALANCED_CONDS = ['under', 'non', 'over']
 MODELS = {
     'logistic_regression': LogisticRegression,
     'random_forest': RandomForestClassifier,
@@ -66,29 +67,29 @@ def main():
     """
     # First use node features only
     for balanced_cond in BALANCED_CONDS:
-        ckpt_path = ABS_JOIN('models', 'controls', 'node_features',
+        ckpt_dir = ABS_JOIN('models', 'controls', 'node_features',
                              '%s_balanced' % balanced_cond)
-        os.makedirs(os.path.split(ckpt_path)[0], exist_ok=True)
-        run_all_models(ckpt_path, 'nodes', balanced_cond)
+        os.makedirs(os.path.split(ckpt_dir)[0], exist_ok=True)
+        run_all_models(ckpt_dir, 'nodes', balanced_cond)
             
     # Second, use edge features only
     for setting_cond in SETTING_CONDS:
         for balanced_cond in BALANCED_CONDS:
             for link_cond in LINK_CONDS:
-                ckpt_path = ABS_JOIN('models', 'controls', 'edge_features',
-                                     '%s_setting' % setting_cond,
-                                     '%s_balanced' % balanced_cond,
-                                     'links_%s' % link_cond)
-                os.makedirs(os.path.split(ckpt_path)[0], exist_ok=True)
-                run_all_models(ckpt_path, 'edges',
+                ckpt_dir = ABS_JOIN('models', 'controls', 'edge_features',
+                                    '%s_setting' % setting_cond,
+                                    '%s_balanced' % balanced_cond,
+                                    'links_%s' % link_cond)
+                os.makedirs(os.path.split(ckpt_dir)[0], exist_ok=True)
+                run_all_models(ckpt_dir, 'edges',
                                balanced_cond, setting_cond, link_cond)
                 
                 
-def run_all_models(ckpt_path: str,
-                   feat_cond: bool,
-                   balanced_cond: bool,
-                   setting_cond: bool=False,
-                   link_cond: bool=False,
+def run_all_models(ckpt_dir: str,
+                   feat_cond: str,
+                   balanced_cond: str,
+                   setting_cond: str=None,
+                   link_cond: str=None,
                    ) -> None:
     """ Train and test all control models, after hyper-parameter grid search
     """
@@ -96,13 +97,18 @@ def run_all_models(ckpt_path: str,
           (feat_cond, setting_cond, balanced_cond, link_cond))
     for model_name in MODELS.keys():
         print('\nNow running %s algorithm' % model_name)
-        run_one_model(model_name, ckpt_path, feat_cond, balanced_cond,
+        run_one_model(model_name, ckpt_dir, feat_cond, balanced_cond,
                       setting_cond, link_cond)
     print('\nAll models were run!\n')
     
 
-def run_one_model(model_name, ckpt_path, feature_cond, balanced_cond,
-                  setting_cond=None, link_cond=None):
+def run_one_model(model_name: str,
+                  ckpt_dir: str,
+                  feature_cond: str,
+                  balanced_cond: str,
+                  setting_cond: str=None,
+                  link_cond: str=None
+                  ) -> None:
     """ Train and test one model, after hyper-parameter grid search
     """
     # Load the correct set of data samples
@@ -111,7 +117,7 @@ def run_one_model(model_name, ckpt_path, feature_cond, balanced_cond,
         X, y, _ = load_features_and_labels(balanced_cond)
     elif feature_cond == 'edges':
         X, y = load_graph_features_and_labels(setting_cond, balanced_cond, link_cond)
-        
+    
     # Find the best set of hyperparameters or load best model
     print('Finding best model hyper-parameters using random search')
     objective = partial(tune_model, X=X, y=y, model_name=model_name)
@@ -124,7 +130,7 @@ def run_one_model(model_name, ckpt_path, feature_cond, balanced_cond,
     optuna.pruners.SuccessiveHalvingPruner()
     study.optimize(objective, n_trials=500, n_jobs=N_CPUS)
     # fig = optuna.visualization.plot_contour(study)
-    # fig.write_image(ckpt_path + '_' + model_name + '.png')
+    # fig.write_image(os.path.join(ckpt_dir, model_name + '.png'))
     
     # Re-train and evaluate the best model
     best_params = study.best_trial.params
@@ -132,12 +138,12 @@ def run_one_model(model_name, ckpt_path, feature_cond, balanced_cond,
     model.fit(X['train'], y['train'])  # add dev data here?
     y_prob_test = model.predict_proba(X['test'])[:, POSITIVE_ID]
     report = generate_minimal_report(y['test'], y_prob_test)
-    write_report(report, model_name, best_params, ckpt_path)
+    write_report(report, model_name, best_params, ckpt_dir)
     
 
 def tune_model(trial: optuna.trial.Trial,
-               X: np.array,
-               y: np.array,
+               X: np.ndarray,
+               y: np.ndarray,
                model_name: str,
                ) -> float:
     """ Find best catboost model with grid-search and k-fold cross-validation,
@@ -161,15 +167,19 @@ def tune_model(trial: optuna.trial.Trial,
     return roc_auc
     
 
-def write_report(report, model_name, best_params, ckpt_path):
+def write_report(report: str,
+                 model_name: str,
+                 best_params: dict,
+                 ckpt_dir: str,
+                 ) -> None:
     """ Write classification report (micro/macro precision/recall/f1-score)
     """
-    report_path = ckpt_path + '.txt'
-    with open(report_path, 'a') as f:
-        print('Writing result report to %s' % report_path)
-        f.write('Results for %s\n' % model_name)
-        f.write('Best hyperparameters: %s\n' % best_params)
-        f.write(report + '\n\n')
+    os.makedirs(ckpt_dir, exist_ok=True)
+    print('Writing result report to %s' % ckpt_dir)
+    report_path = os.path.join(ckpt_dir, '%s.txt' % model_name)
+    with open(report_path, 'w') as f: f.write(report)
+    best_params_path = os.path.join(ckpt_dir, '%s_best_params.json' % model_name)
+    with open(best_params_path, 'w') as f: json.dump(best_params, f, indent=4)
         
 
 if __name__ == '__main__':

@@ -1,4 +1,5 @@
 import os
+import json
 import shutil
 import optuna
 import torch
@@ -72,10 +73,12 @@ def main():
                 best_pl_model = PLWrapperNet(best_params, dataset, setting_cond)
                 trainer = train_model(best_pl_model, logdir)  # retrain best one
                 trainer.test(best_pl_model, ckpt_path='best')  # generate report
+                report = best_pl_model.test_report
                 with open(os.path.join(logdir, 'report.txt'), 'w') as f:
-                    report = best_pl_model.test_report
-                    f.write('%s\nBest params:\n%s' % (report, best_params))
-                    
+                    f.write(report)
+                with open(os.path.join(logdir, 'best_params.json'), 'w') as f:
+                    json.dump(best_params, f, indent=4)
+
                     
 def tune_net(trial: optuna.trial.Trial,
              dataset: Data,
@@ -141,7 +144,11 @@ def train_model(pl_model: pl.LightningModule,
 
     
 class PLWrapperNet(pl.LightningModule):
-    def __init__(self, config, dataset, setting_cond):
+    def __init__(self,
+                 config: dict,
+                 dataset: Data,
+                 setting_cond: str
+                 ) -> None:
         """ Pytorch-lightning object wrapping around model config and training
         """
         super().__init__()
@@ -200,12 +207,12 @@ class PLWrapperNet(pl.LightningModule):
         auroc = roc_auc_score(y_true, y_prob)
         return {'report': report, 'auroc': auroc}
         
-    def configure_optimizers(self):
+    def configure_optimizers(self) -> tuple[list[dict]]:
         optim = AdamW(self.net.parameters(), lr=self.lr, weight_decay=1e-4)
         sched = OneCycleLR(optim, self.lr, total_steps=N_TRAIN_EPOCHS)
         return [optim], [{'scheduler': sched, 'interval': 'epoch'}]
     
-    def get_dataloader(self, split):
+    def get_dataloader(self, split: str) -> DataLoader:
         """ Generic function to initialize and return an iterable data split
         """
         if self.setting_cond == 'transductive':
@@ -215,22 +222,25 @@ class PLWrapperNet(pl.LightningModule):
             data = self.dataset.get_split(split)
         return DataLoader(dataset=[data], batch_size=None)
         
-    def train_dataloader(self):
+    def train_dataloader(self) -> DataLoader:
         """ Return the training dataloader
         """
         return self.get_dataloader('train')
     
-    def val_dataloader(self):
+    def val_dataloader(self) -> DataLoader:
         """ Return the validation dataloader
         """
         return self.get_dataloader('dev')
     
-    def test_dataloader(self):
+    def test_dataloader(self) -> DataLoader:
         """ Return the testing dataloader
         """
         return self.get_dataloader('test')
     
-    def init_criterions(self, w_balance, loss_type='focal'):
+    def init_criterions(self,
+                        w_balance: float,
+                        loss_type: str='focal'
+                        ) -> dict:
         """ Initialize class-weighted train and dev criterion (better way?)
         """
         # Get train and dev labels
@@ -294,7 +304,10 @@ class Net(nn.Module):
                 self.layers.append(GATConv(hidden_dim, n_out, heads=n_heads))
             self.layers.append(GATConv(hidden_dim, 1))
             
-    def forward(self, x, edge_index):
+    def forward(self,
+                x: torch.Tensor,
+                edge_index: torch.Tensor
+                ) -> torch.Tensor:
         """ Forward pass of the graph neural network
         """
         for i in range(len(self.layers) - 1):

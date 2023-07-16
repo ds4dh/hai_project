@@ -92,7 +92,7 @@ def main():
         generate_features_and_labels()  # (274_323, 12) -> 267_106 non-colonised, 7_617 colonised
         
     # Save different data splittings for different balanced scenarios
-    for balanced_cond in ['non', 'under', 'over']:
+    for balanced_cond in ['under', 'over', 'non']:
         if 1:  # REGENERATE_DATASET_FROM_SCRATCH:
             save_data_splits(balanced_cond)
         load_features_and_labels(balanced_cond)
@@ -271,20 +271,8 @@ def save_data_splits(balanced='non'):
     """ Save data set splits from processed dataset file
     """
     print('Saving data set splits using main data file')
-    # Get data and balance it by outcome label if required (undersampling)
+    # Get data features and labels and keep node ids for graph models
     df_data = pd.read_csv(PATH_FEATURES_AND_LABELS, index_col=[0])
-    if balanced == 'under':
-        df_minor = df_data[df_data['COLONISED'] == 1]
-        df_major = df_data[df_data['COLONISED'] == 0]
-        df_major = df_major.sample(n=len(df_minor))
-        df_data = pd.concat([df_minor, df_major])
-    if balanced == 'over':
-        df_minor = df_data[df_data['COLONISED'] == 1]
-        df_major = df_data[df_data['COLONISED'] == 0]
-        df_minor = df_minor.sample(n=len(df_major), replace=True)
-        df_data = pd.concat([df_major, df_minor])
-    
-    # Separate input features and labels and keep node ids for graph models
     df_y = df_data['COLONISED']
     df_X = df_data.drop(['COLONISED'], axis=1)
     
@@ -304,6 +292,19 @@ def save_data_splits(balanced='non'):
     X_train, X_dev, y_train, y_dev = train_test_split(
         X_train, y_train, test_size=0.25, random_state=2, shuffle=True)
     
+    # Over-sample or under-sample training data if required
+    if balanced in ['under', 'over']:
+        X_minor = X_train[y_train == 1]; y_minor = y_train[y_train == 1]
+        X_major = X_train[y_train == 0]; y_major = y_train[y_train == 0]
+        if balanced == 'under':
+            X_major = X_major.sample(n=len(X_minor))
+            y_major = y_major[X_major.index]  # corresponding labels
+        if balanced == 'over':
+            X_minor = X_minor.sample(n=len(X_major), replace=True)
+            y_minor = y_minor[X_minor.index]  # corresponding labels
+        X_train = pd.concat([X_major, X_minor])
+        y_train = pd.concat([y_major, y_minor])
+                    
     # Save features (as numpy.array)
     X_train.to_pickle(ABS_JOIN(balanced_dir, 'X_train.pkl'))
     X_dev.to_pickle(ABS_JOIN(balanced_dir, 'X_dev.pkl'))
@@ -313,6 +314,54 @@ def save_data_splits(balanced='non'):
     y_train.to_pickle(ABS_JOIN(balanced_dir, 'y_train.pkl'))
     y_dev.to_pickle(ABS_JOIN(balanced_dir, 'y_dev.pkl'))
     y_test.to_pickle(ABS_JOIN(balanced_dir, 'y_test.pkl'))
+
+
+# def save_data_splits_old(balanced='non'):
+#     """ Save data set splits from processed dataset file
+#     """
+#     print('Saving data set splits using main data file')
+#     # Get data and balance it by outcome label if required (undersampling)
+#     df_data = pd.read_csv(PATH_FEATURES_AND_LABELS, index_col=[0])
+#     if balanced == 'under':
+#         df_minor = df_data[df_data['COLONISED'] == 1]
+#         df_major = df_data[df_data['COLONISED'] == 0]
+#         df_major = df_major.sample(n=len(df_minor))
+#         df_data = pd.concat([df_minor, df_major])
+#     if balanced == 'over':
+#         df_minor = df_data[df_data['COLONISED'] == 1]
+#         df_major = df_data[df_data['COLONISED'] == 0]
+#         df_minor = df_minor.sample(n=len(df_major), replace=True)
+#         df_data = pd.concat([df_major, df_minor])
+    
+#     # Separate input features and labels and keep node ids for graph models
+#     df_y = df_data['COLONISED']
+#     df_X = df_data.drop(['COLONISED'], axis=1)
+    
+#     # One-hotize string features and handle missing numerical values 
+#     for feat in STRING_FEATURES:
+#         df_X[feat] = pd.Categorical(df_X[feat])
+#         one_hot_features = pd.get_dummies(df_X[feat], prefix=feat)
+#         df_X = pd.concat([df_X, one_hot_features], axis=1)
+#         df_X = df_X.drop(feat, axis=1)
+#     df_X.fillna(0, inplace=True)
+    
+#     # Create data splits (-> shuffle samples, hence linked node ids and labels)
+#     balanced_dir = ABS_JOIN(PROCESSED_DATA_DIR, '%s_balanced' % balanced)
+#     os.makedirs(balanced_dir, exist_ok=True)
+#     X_train, X_test, y_train, y_test = train_test_split(
+#         df_X, df_y, test_size=0.2, random_state=2, shuffle=True)
+#     X_train, X_dev, y_train, y_dev = train_test_split(
+#         X_train, y_train, test_size=0.25, random_state=2, shuffle=True)
+    
+#     # Save features (as numpy.array)
+#     X_train.to_pickle(ABS_JOIN(balanced_dir, 'X_train.pkl'))
+#     X_dev.to_pickle(ABS_JOIN(balanced_dir, 'X_dev.pkl'))
+#     X_test.to_pickle(ABS_JOIN(balanced_dir, 'X_test.pkl'))
+    
+#     # Save labels (as dataframes, to keep trak of node ids)
+#     y_train.to_pickle(ABS_JOIN(balanced_dir, 'y_train.pkl'))
+#     y_dev.to_pickle(ABS_JOIN(balanced_dir, 'y_dev.pkl'))
+#     y_test.to_pickle(ABS_JOIN(balanced_dir, 'y_test.pkl'))
 
 
 def load_features_and_labels(balanced='non'):

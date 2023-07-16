@@ -365,7 +365,7 @@ class IPCDataset(InMemoryDataset):
                 loading_failed = True
                 
         # Else, regenerate node embeddings
-        if REGENERATE_LINKS_FROM_SCRATCH or loading_failed:
+        if REGENERATE_STELLAR_DATA_FROM_SCRATCH or loading_failed:
             os.makedirs(os.path.split(pickle_path)[0], exist_ok=True)
             stellar_graph = StellarGraph.from_networkx(nx_graph)
             walks = self.create_random_walks(stellar_graph)
