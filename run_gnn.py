@@ -17,15 +17,19 @@ from data.graph_utils import IPCDataset
 from optuna.integration import PyTorchLightningPruningCallback as PLPruningCallback
 from functools import partial
 from sklearn.metrics import roc_auc_score
-from run_utils import FocalLoss, generate_minimal_report
+from run_utils import FocalLoss, generate_dict_report, find_optimal_threshold
 from warnings import filterwarnings
 filterwarnings('ignore', category=UserWarning, module='pytorch_lightning')
 filterwarnings('ignore', category=RuntimeWarning, module='pytorch_lightning')
 
+# Helper function
+def ABS_JOIN(*args):
+    return os.path.abspath(os.path.join(*args))
 
+DO_HYPER_OPTIM = False
 N_TRAIN_EPOCHS = 500
 SETTING_CONDS = ['inductive', 'transductive']
-BALANCED_CONDS = ['under', 'non', 'over']
+BALANCED_CONDS = ['under', 'non']  # , 'over']
 LINK_CONDS = ['all', 'wards', 'caregivers', 'no']
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
 N_GPUS = torch.cuda.device_count()
@@ -41,44 +45,53 @@ def main():
             for link_cond in LINK_CONDS:
                 # Initialize dataset and result directory, given conditions
                 print('New run: %s setting, %s-balanced data, %s link(s)' %
-                      (setting_cond, balanced_cond, link_cond))
+                    (setting_cond, balanced_cond, link_cond))
                 dataset = IPCDataset(setting_cond, balanced_cond, link_cond)
-                logdir = os.path.abspath(os.path.join(
+                logdir = ABS_JOIN(
                     'models', 'gnn',
                     '%s_setting' % setting_cond,
                     '%s_balanced' % balanced_cond,
                     '%s_links' % link_cond
-                ))
-                if os.path.exists(logdir): shutil.rmtree(logdir)
-                os.makedirs(logdir)
-                
-                # Define dataset and start hyper-parameter tuning
-                objective = partial(
-                    tune_net, dataset=dataset, balanced_cond=balanced_cond,
-                    setting_cond=setting_cond, logdir=logdir,
                 )
-                study = optuna.create_study(
-                    study_name='run_gnn_pl',
-                    direction='maximize',
-                    pruner=optuna.pruners.MedianPruner(n_warmup_steps=50),
-                    sampler=optuna.samplers.TPESampler(),
-                )
-                optuna.pruners.SuccessiveHalvingPruner()
-                study.optimize(objective, n_trials=500, n_jobs=N_CPUS)
-                # fig = optuna.visualization.plot_contour(study)
-                # fig.write_image(os.path.join(logdir, 'visualization.png'))
                 
+                # Hyper-optimization loop to find best model
+                if DO_HYPER_OPTIM == True:
+                    if os.path.exists(logdir): shutil.rmtree(logdir)  # needed?
+                    os.makedirs(logdir, exist_ok=True)
+                    objective = partial(
+                        tune_net, dataset=dataset, balanced_cond=balanced_cond,
+                        setting_cond=setting_cond, logdir=logdir,
+                    )
+                    study = optuna.create_study(
+                        study_name='run_gnn_pl',
+                        direction='maximize',
+                        pruner=optuna.pruners.MedianPruner(n_warmup_steps=50),
+                        sampler=optuna.samplers.TPESampler(),
+                    )
+                    optuna.pruners.SuccessiveHalvingPruner()
+                    study.optimize(objective, n_trials=500, n_jobs=N_CPUS)
+                    best_params = study.best_trial.params
+                
+                # Load from the result of a previous hyper-optimization run
+                else:
+                    try:
+                        with open(ABS_JOIN(logdir, 'best_params.json'), 'r') as f:
+                            best_params = json.load(f)
+                    except:
+                        continue
+                    
                 # Load the best model and report best metric
-                best_params = study.best_trial.params
                 best_pl_model = PLWrapperNet(best_params, dataset, setting_cond)
                 trainer = train_model(best_pl_model, logdir)  # retrain best one
+                best_pl_model.optimize_threshold = True  # only from there
+                trainer.validate(best_pl_model, ckpt_path='best')
                 trainer.test(best_pl_model, ckpt_path='best')  # generate report
                 report = best_pl_model.test_report
-                with open(os.path.join(logdir, 'report.txt'), 'w') as f:
-                    f.write(report)
-                with open(os.path.join(logdir, 'best_params.json'), 'w') as f:
+                with open(ABS_JOIN(logdir, 'gnn_report.json'), 'w') as f:
+                    json.dump(report, f, indent=4)
+                with open(ABS_JOIN(logdir, 'best_params.json'), 'w') as f:
                     json.dump(best_params, f, indent=4)
-
+                    
                     
 def tune_net(trial: optuna.trial.Trial,
              dataset: Data,
@@ -147,14 +160,16 @@ class PLWrapperNet(pl.LightningModule):
     def __init__(self,
                  config: dict,
                  dataset: Data,
-                 setting_cond: str
+                 setting_cond: str,
                  ) -> None:
         """ Pytorch-lightning object wrapping around model config and training
         """
         super().__init__()
         self.lr = config['lr']
-        self.setting_cond = setting_cond
         self.dataset = dataset
+        self.setting_cond = setting_cond
+        self.optimize_threshold = False
+        self.decision_threshold = 0.5  # initialization
         self.net = Net(dataset.num_features, **config)
         self.criterions = self.init_criterions(config['w_balance'])
         
@@ -192,18 +207,25 @@ class PLWrapperNet(pl.LightningModule):
     def test_step(self, batch, batch_idx):
         """ Validation step using either inductive or transductive setting
         """
-        evaluation = self.evaluate_net(batch)
+        evaluation = self.evaluate_net(batch, test_mode=True)
         self.test_report = evaluation['report']
         
-    def evaluate_net(self, batch):
+    def evaluate_net(self, batch, test_mode=False):
         """ Final evaluation of fine-tuned and trained model
         """
+        # Generate predictions and load true labels
         y_prob = self.forward(batch).cpu().numpy()
         y_true = batch.y
         if self.setting_cond == 'transductive':
             y_true = y_true[batch.mask]
         y_true = y_true.cpu().numpy()
-        report = generate_minimal_report(y_true, y_prob)
+        
+        # Optimize (or not) decision threshold before using testing data
+        if self.optimize_threshold and not test_mode:  # using validation data
+            self.decision_threshold = find_optimal_threshold(y_true, y_prob)
+        
+        # Return metrics
+        report = generate_dict_report(y_true, y_prob, self.decision_threshold)
         auroc = roc_auc_score(y_true, y_prob)
         return {'report': report, 'auroc': auroc}
         

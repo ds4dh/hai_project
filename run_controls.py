@@ -5,7 +5,7 @@ import optuna
 from functools import partial
 from data.data_utils import load_features_and_labels
 from data.graph_utils import load_graph_features_and_labels
-from run_utils import generate_minimal_report
+from run_utils import generate_dict_report, find_optimal_threshold
 from sklearn.metrics import roc_auc_score
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
@@ -20,7 +20,7 @@ warnings.filterwarnings('ignore', category=ConvergenceWarning)
 def ABS_JOIN(*args):
     return os.path.abspath(os.path.join(*args))
 
-# Run parameters
+DO_HYPER_OPTIM = False
 N_CPUS = 12
 POSITIVE_ID = 1  # label id for 'infected' label
 SETTING_CONDS = ['inductive', 'transductive']  # only used if graph features
@@ -72,7 +72,7 @@ def main():
         os.makedirs(os.path.split(ckpt_dir)[0], exist_ok=True)
         run_all_models(ckpt_dir, 'nodes', balanced_cond)
             
-    # Second, use edge features only
+    # Second, use node and edge features (generated with node2vec)
     for setting_cond in SETTING_CONDS:
         for balanced_cond in BALANCED_CONDS:
             for link_cond in LINK_CONDS:
@@ -116,28 +116,39 @@ def run_one_model(model_name: str,
     if feature_cond == 'nodes':
         X, y, _ = load_features_and_labels(balanced_cond)
     elif feature_cond == 'edges':
-        X, y = load_graph_features_and_labels(setting_cond, balanced_cond, link_cond)
+        X, y = load_graph_features_and_labels(
+            setting_cond, balanced_cond, link_cond)
     
-    # Find the best set of hyperparameters or load best model
-    print('Finding best model hyper-parameters using random search')
-    objective = partial(tune_model, X=X, y=y, model_name=model_name)
-    study = optuna.create_study(
-        study_name='run_control_pl',
-        direction='maximize',
-        pruner=optuna.pruners.MedianPruner(n_warmup_steps=50),
-        sampler=optuna.samplers.TPESampler(),
-    )
-    optuna.pruners.SuccessiveHalvingPruner()
-    study.optimize(objective, n_trials=500, n_jobs=N_CPUS)
-    # fig = optuna.visualization.plot_contour(study)
-    # fig.write_image(os.path.join(ckpt_dir, model_name + '.png'))
+    # Hyper-optimization loop to find best set of model hyper-parameters
+    if DO_HYPER_OPTIM == True:        
+        print('Finding best model hyper-parameters using random search')
+        objective = partial(tune_model, X=X, y=y, model_name=model_name)
+        study = optuna.create_study(
+            study_name='run_control_pl',
+            direction='maximize',
+            pruner=optuna.pruners.MedianPruner(n_warmup_steps=50),
+            sampler=optuna.samplers.TPESampler(),
+        )
+        optuna.pruners.SuccessiveHalvingPruner()
+        study.optimize(objective, n_trials=500, n_jobs=N_CPUS)
+        best_params = study.best_trial.params
+        
+    # Load from the result of a previous hyper-optimization run
+    else:
+        try:
+            params_path = ABS_JOIN(ckpt_dir, '%s_best_params.json' % model_name)
+            with open(params_path, 'r') as f:
+                best_params = json.load(f)
+        except:
+            return
     
     # Re-train and evaluate the best model
-    best_params = study.best_trial.params
-    model = MODELS[model_name](**best_params)
+    model = initialize_model(model_name, best_params)
     model.fit(X['train'], y['train'])  # add dev data here?
+    y_prob_dev = model.predict_proba(X['dev'])[:, POSITIVE_ID]
     y_prob_test = model.predict_proba(X['test'])[:, POSITIVE_ID]
-    report = generate_minimal_report(y['test'], y_prob_test)
+    optimal_threhsold = find_optimal_threshold(y['dev'], y_prob_dev)
+    report = generate_dict_report(y['test'], y_prob_test, optimal_threhsold)
     write_report(report, model_name, best_params, ckpt_dir)
     
 
@@ -152,10 +163,7 @@ def tune_model(trial: optuna.trial.Trial,
     # Define model with suggested parameters
     model_params = {k: trial.suggest_categorical(k, v)
                     for k, v in GRIDS[model_name].items()}
-    try:
-        model = MODELS[model_name](**model_params, verbose=False)
-    except:
-        model = MODELS[model_name](**model_params)
+    model = initialize_model(model_name, model_params)
     
     # Train model and return auroc computed with the validation set
     try:
@@ -167,7 +175,7 @@ def tune_model(trial: optuna.trial.Trial,
     return roc_auc
     
 
-def write_report(report: str,
+def write_report(report: dict,
                  model_name: str,
                  best_params: dict,
                  ckpt_dir: str,
@@ -176,11 +184,23 @@ def write_report(report: str,
     """
     os.makedirs(ckpt_dir, exist_ok=True)
     print('Writing result report to %s' % ckpt_dir)
-    report_path = os.path.join(ckpt_dir, '%s.txt' % model_name)
-    with open(report_path, 'w') as f: f.write(report)
-    best_params_path = os.path.join(ckpt_dir, '%s_best_params.json' % model_name)
-    with open(best_params_path, 'w') as f: json.dump(best_params, f, indent=4)
+    report_path = ABS_JOIN(ckpt_dir, '%s_report.json' % model_name)
+    with open(report_path, 'w') as f:
+        json.dump(report, f, indent=4)  # f.write(report)
+    best_params_path = ABS_JOIN(ckpt_dir, '%s_best_params.json' % model_name)
+    with open(best_params_path, 'w') as f:
+        json.dump(best_params, f, indent=4)
         
+        
+def initialize_model(model_name: str,
+                     params: dict):
+    """ Load model in silence mode if possible, and load it anyways if not
+    """
+    try:
+        return MODELS[model_name](**params, verbose=False)
+    except:
+        return MODELS[model_name](**params)
+    
 
 if __name__ == '__main__':
     main()

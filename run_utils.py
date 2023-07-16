@@ -12,38 +12,40 @@ from sklearn.metrics import (
 )
 
 
-def generate_minimal_report(y_true, y_score, threshold=0.5):
+def generate_dict_report(y_true, y_score, threshold=0.5):
     """ Evaluate a trained model using some data
     """
-    y_pred = (y_score >= threshold).astype(int)
-    report = '\n*** Using threshold = %s ***\n' % threshold
-    report += classification_report(y_true, y_pred, zero_division=0)
-    report += '\n*** AUROC-CI = %s ***\n' % auroc_ci(y_true, y_score)
+    # Base classification report (using 0.5 threshold)
+    y_pred = (y_score >= 0.5).astype(int)
+    report = classification_report(
+        y_true, y_pred, zero_division=0, output_dict=True)
+    report['threshold_base'] = 0.5
+    
+    # Classification report with threhsold optimized on f1-score
+    y_pred_optim = (y_score >= threshold).astype(int)
+    report_optim = classification_report(
+        y_true, y_pred_optim, zero_division=0, output_dict=True)
+    report.update({'%s_optim' % k: v for k, v in report_optim.items()})
+    report['threshold_optim'] = threshold
+    
+    # Auroc and confidence interval
+    auroc, auroc_low, auroc_high = auroc_ci(y_true, y_score)
+    report['auroc'] = auroc
+    report['auroc-low'] = auroc_low
+    report['auroc-high'] = auroc_high
+    
+    # Return report
     return report
 
 
-def generate_report(y_prob_dev, y_prob_test, y_dev, y_test):
-    """ Evaluate a trained model using the test data, after identifying the
-        optimal threshold using the validation data
-    """
-    optimal_threshold = find_optimal_threshold(y_prob_dev, y_dev)
-    report = ''
-    for threshold in [0.5, optimal_threshold]:
-        y_pred_test = (y_prob_test >= threshold).astype(int)
-        report += '\n*** Using threshold = %s ***\n' % threshold
-        report += classification_report(y_test, y_pred_test)
-    report += '\n*** AUROC-CI = %s ***\n' % auroc_ci(y_test, y_prob_test)
-    return report
-
-
-def find_optimal_threshold(y_prob_dev, y_dev):
-    """ Find optimal decision threshold using the validation set
+def find_optimal_threshold(y_true, y_score):
+    """ Find optimal decision threshold (using the validation set)
     """
     thresholds = np.linspace(0, 1, 100)
     scores = []
     for t in thresholds:
-        y_pred_dev = (y_prob_dev >= t).astype(int)
-        score = f1_score(y_dev, y_pred_dev)
+        y_pred_dev = (y_score >= t).astype(int)
+        score = f1_score(y_true, y_pred_dev)
         scores.append(score)
     return thresholds[np.argmax(scores)]
 
@@ -58,7 +60,7 @@ def auroc_ci(y_true, y_score, t_value=1.96):
     p2 = (n2 - 1) * (2 * auroc ** 2 / (1 + auroc) - auroc ** 2)
     std_auroc = ((auroc * (1 - auroc) + p1 + p2) / (n1 * n2)) ** 0.5
     low, high = (auroc - t_value * std_auroc, auroc + t_value * std_auroc)
-    return '%.3f (%.3f, %.3f)' % (auroc, low, high)
+    return (auroc, low, high)
 
 
 def plot_roc_curve(y_true, y_scores):
