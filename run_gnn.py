@@ -17,7 +17,7 @@ from data.graph_utils import IPCDataset
 from optuna.integration import PyTorchLightningPruningCallback as PLPruningCallback
 from functools import partial
 from sklearn.metrics import roc_auc_score
-from run_utils import FocalLoss, generate_dict_report, find_optimal_threshold
+from run_utils import FocalLoss, generate_report, find_optimal_threshold
 from warnings import filterwarnings
 filterwarnings('ignore', category=UserWarning, module='pytorch_lightning')
 filterwarnings('ignore', category=RuntimeWarning, module='pytorch_lightning')
@@ -29,7 +29,7 @@ def ABS_JOIN(*args):
 DO_HYPER_OPTIM = False
 N_TRAIN_EPOCHS = 500
 SETTING_CONDS = ['inductive', 'transductive']
-BALANCED_CONDS = ['under', 'non']  # , 'over']
+BALANCED_CONDS = ['under', 'non', 'over']
 LINK_CONDS = ['all', 'wards', 'caregivers', 'no']
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
 N_GPUS = torch.cuda.device_count()
@@ -69,7 +69,7 @@ def main():
                         sampler=optuna.samplers.TPESampler(),
                     )
                     optuna.pruners.SuccessiveHalvingPruner()
-                    study.optimize(objective, n_trials=500, n_jobs=N_CPUS)
+                    study.optimize(objective, n_trials=100, n_jobs=N_CPUS)
                     best_params = study.best_trial.params
                 
                 # Load from the result of a previous hyper-optimization run
@@ -79,20 +79,30 @@ def main():
                             best_params = json.load(f)
                     except:
                         continue
-                    
-                # Load the best model and report best metric
-                best_pl_model = PLWrapperNet(best_params, dataset, setting_cond)
-                trainer = train_model(best_pl_model, logdir)  # retrain best one
-                best_pl_model.optimize_threshold = True  # only from there
-                trainer.validate(best_pl_model, ckpt_path='best')
-                trainer.test(best_pl_model, ckpt_path='best')  # generate report
-                report = best_pl_model.test_report
+                
+                # Evaluate best model and report best metric
+                test_eval = evaluate_net(dataset, setting_cond, best_params)
                 with open(ABS_JOIN(logdir, 'gnn_report.json'), 'w') as f:
-                    json.dump(report, f, indent=4)
+                    json.dump(test_eval['report'], f, indent=4)
                 with open(ABS_JOIN(logdir, 'best_params.json'), 'w') as f:
                     json.dump(best_params, f, indent=4)
-                    
-                    
+
+
+def evaluate_net(dataset: Data,
+                 params: dict,
+                 setting_cond: str,
+                 logdir: str
+                 ) -> dict:
+    """ Train a model and evaluate it with test dataset
+    """
+    pl_model = PLWrapperNet(params, dataset, setting_cond)
+    trainer = train_model(pl_model, logdir)  # retrain model (very short)
+    pl_model.optimize_threshold = True  # set threshold optimization
+    trainer.validate(pl_model, ckpt_path='best')  # find best threshold
+    trainer.test(pl_model, ckpt_path='best')  # evaluate model
+    return pl_model.test_evaluation
+
+
 def tune_net(trial: optuna.trial.Trial,
              dataset: Data,
              balanced_cond: str,
@@ -104,7 +114,7 @@ def tune_net(trial: optuna.trial.Trial,
     # Initialize pytorch-lightning instance (model, data, optimizer, scheduler)
     if balanced_cond == 'over':  # avoid OOM
         torch.set_float32_matmul_precision('medium')
-        hidden_dim_choice = [32, 64, 128]  # [32, 64, 128]
+        hidden_dim_choice = [32, 64, 128]
         layer_choice = ['gcn', 'sage']
     else:  # try more parameters
         torch.set_float32_matmul_precision('high')
@@ -179,17 +189,17 @@ class PLWrapperNet(pl.LightningModule):
         y_logits = self.net(batch.x, batch.edge_index)
         if self.setting_cond == 'transductive':
             y_logits = y_logits[batch.mask]
-        y_probs = torch.sigmoid(y_logits).view(-1)
-        return y_probs
+        y_scores = torch.sigmoid(y_logits).view(-1)
+        return y_scores
     
     def compute_loss(self, batch, split):
         """ Compute loss for train or dev step
         """
-        y_prob = self.forward(batch)
+        y_score = self.forward(batch)
         y_true = batch.y
         if self.setting_cond == 'transductive':
             y_true = y_true[batch.mask]
-        return self.criterions[split](y_prob, y_true)
+        return self.criterions[split](y_score, y_true)
     
     def training_step(self, batch, batch_idx):
         """ Training step using either inductive or transductive setting
@@ -202,19 +212,18 @@ class PLWrapperNet(pl.LightningModule):
         loss = self.compute_loss(batch, split='dev')
         evaluation = self.evaluate_net(batch)
         self.log('dev_loss', loss, batch_size=1)
-        self.log('dev_auroc', evaluation['auroc'], batch_size=1)
+        self.log('dev_auroc', evaluation['report']['auroc'], batch_size=1)
     
     def test_step(self, batch, batch_idx):
-        """ Validation step using either inductive or transductive setting
+        """ Evaluate network with testing data
         """
-        evaluation = self.evaluate_net(batch, test_mode=True)
-        self.test_report = evaluation['report']
+        self.test_evaluation = self.evaluate_net(batch, test_mode=True)
         
     def evaluate_net(self, batch, test_mode=False):
         """ Final evaluation of fine-tuned and trained model
         """
         # Generate predictions and load true labels
-        y_prob = self.forward(batch).cpu().numpy()
+        y_score = self.forward(batch).cpu().numpy()
         y_true = batch.y
         if self.setting_cond == 'transductive':
             y_true = y_true[batch.mask]
@@ -222,12 +231,15 @@ class PLWrapperNet(pl.LightningModule):
         
         # Optimize (or not) decision threshold before using testing data
         if self.optimize_threshold and not test_mode:  # using validation data
-            self.decision_threshold = find_optimal_threshold(y_true, y_prob)
+            self.decision_threshold = find_optimal_threshold(y_true, y_score)
         
-        # Return metrics
-        report = generate_dict_report(y_true, y_prob, self.decision_threshold)
-        auroc = roc_auc_score(y_true, y_prob)
-        return {'report': report, 'auroc': auroc}
+        # Evaluate model with 0.5 or f1-score optimized decision threshold)
+        report = generate_report(y_true, y_score, 0.5)
+        report_optim = generate_report(y_true, y_score, self.decision_threshold)
+        report.update({'%s_optim' % k: v for k, v in report_optim.items()})
+        
+        # Return metrics, true labels, and model predictions
+        return {'report': report, 'y_true': y_true, 'y_score': y_score}
         
     def configure_optimizers(self) -> tuple[list[dict]]:
         optim = AdamW(self.net.parameters(), lr=self.lr, weight_decay=1e-4)

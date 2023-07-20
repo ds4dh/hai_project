@@ -191,20 +191,22 @@ def account_for_duplicate_nodes(node_ids: pd.Index,
         
     # Go through all duplicate nodes
     node_ids_to_add, edges_to_add = [], []
-    for node_id, count in tqdm(
-            plural_node_ids.items(), leave=False, total=len(plural_node_ids),
-            desc=' - Nodes and edges updated for over-sampling'):
-        # Identify new unique ids for duplicate nodes (but keep one original)
-        new_node_ids = list(range(max_node_id + 1, max_node_id + count))
-        node_ids_to_add.extend(new_node_ids)
-        max_node_id += count - 1  # count - 1 = len(new_node_ids)
-        
-        # Add new edges for updated node ids, copying original node edges
-        for new_node_id in new_node_ids:
-            new_edges = edges[(edges['src'] == node_id) |
-                              (edges['dst'] == node_id)]\
-                             .replace(node_id, new_node_id)
-            edges_to_add.append(new_edges)
+    if len(plural_node_ids) > 0:
+        for node_id, count in tqdm(
+                plural_node_ids.items(), leave=False, total=len(plural_node_ids),
+                desc=' - Nodes and edges updated for over-sampling'):
+            
+            # Identify new unique ids for duplicate nodes (but keep one original)
+            new_node_ids = list(range(max_node_id + 1, max_node_id + count))
+            node_ids_to_add.extend(new_node_ids)
+            max_node_id += count - 1  # count - 1 = len(new_node_ids)
+            
+            # Add new edges for updated node ids, copying original node edges
+            for new_node_id in new_node_ids:
+                new_edges = edges[(edges['src'] == node_id) |
+                                (edges['dst'] == node_id)]\
+                                .replace(node_id, new_node_id)
+                edges_to_add.append(new_edges)
     
     # Update and return new node_ids and edges
     node_ids = node_ids.unique().append(pd.Index(node_ids_to_add))

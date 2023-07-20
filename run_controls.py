@@ -5,7 +5,7 @@ import optuna
 from functools import partial
 from data.data_utils import load_features_and_labels
 from data.graph_utils import load_graph_features_and_labels
-from run_utils import generate_dict_report, find_optimal_threshold
+from run_utils import generate_report, find_optimal_threshold
 from sklearn.metrics import roc_auc_score
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
@@ -29,7 +29,7 @@ BALANCED_CONDS = ['under', 'non', 'over']
 MODELS = {
     'logistic_regression': LogisticRegression,
     'random_forest': RandomForestClassifier,
-    'catboost': CatBoostClassifier,
+    # 'catboost': CatBoostClassifier,
     'knn': KNeighborsClassifier,
 }
 GRIDS = {
@@ -49,9 +49,9 @@ GRIDS = {
         'class_weight': [None, 'balanced', 'balanced_subsample'],
     },
     'catboost': {
-        'depth': [5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
-        'learning_rate': [0.010, 0.025, 0.050, 0.075, 0.100],
-        'iterations': [500, 1000, 1500, 2000, 2500, 3000],
+        'depth': [5, 6, 7, 8, 9, 10],
+        'learning_rate': [0.001, 0.0025, 0.005, 0.010, 0.025, 0.050],
+        'iterations': [100, 250, 500, 1000, 2500],
     },
     'knn': {
         'n_neighbors': list(range(1, 30)),
@@ -72,17 +72,17 @@ def main():
         os.makedirs(os.path.split(ckpt_dir)[0], exist_ok=True)
         run_all_models(ckpt_dir, 'nodes', balanced_cond)
             
-    # Second, use node and edge features (generated with node2vec)
-    for setting_cond in SETTING_CONDS:
-        for balanced_cond in BALANCED_CONDS:
-            for link_cond in LINK_CONDS:
-                ckpt_dir = ABS_JOIN('models', 'controls', 'edge_features',
-                                    '%s_setting' % setting_cond,
-                                    '%s_balanced' % balanced_cond,
-                                    'links_%s' % link_cond)
-                os.makedirs(os.path.split(ckpt_dir)[0], exist_ok=True)
-                run_all_models(ckpt_dir, 'edges',
-                               balanced_cond, setting_cond, link_cond)
+    # # Second, use node and edge features (generated with node2vec)
+    # for setting_cond in SETTING_CONDS:
+    #     for balanced_cond in BALANCED_CONDS:
+    #         for link_cond in LINK_CONDS:
+    #             ckpt_dir = ABS_JOIN('models', 'controls', 'edge_features',
+    #                                 '%s_setting' % setting_cond,
+    #                                 '%s_balanced' % balanced_cond,
+    #                                 '%s_links' % link_cond)
+    #             os.makedirs(os.path.split(ckpt_dir)[0], exist_ok=True)
+    #             run_all_models(ckpt_dir, 'edges',
+    #                            balanced_cond, setting_cond, link_cond)
                 
                 
 def run_all_models(ckpt_dir: str,
@@ -130,7 +130,7 @@ def run_one_model(model_name: str,
             sampler=optuna.samplers.TPESampler(),
         )
         optuna.pruners.SuccessiveHalvingPruner()
-        study.optimize(objective, n_trials=500, n_jobs=N_CPUS)
+        study.optimize(objective, n_trials=100, n_jobs=N_CPUS)
         best_params = study.best_trial.params
         
     # Load from the result of a previous hyper-optimization run
@@ -148,7 +148,9 @@ def run_one_model(model_name: str,
     y_prob_dev = model.predict_proba(X['dev'])[:, POSITIVE_ID]
     y_prob_test = model.predict_proba(X['test'])[:, POSITIVE_ID]
     optimal_threhsold = find_optimal_threshold(y['dev'], y_prob_dev)
-    report = generate_dict_report(y['test'], y_prob_test, optimal_threhsold)
+    report = generate_report(y['test'], y_prob_test, 0.5)
+    report_optim = generate_report(y['test'], y_prob_test, optimal_threhsold)
+    report.update({'%s_optim' % k: v for k, v in report_optim.items()})    
     write_report(report, model_name, best_params, ckpt_dir)
     
 

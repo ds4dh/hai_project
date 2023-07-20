@@ -12,21 +12,14 @@ from sklearn.metrics import (
 )
 
 
-def generate_dict_report(y_true, y_score, threshold=0.5):
+def generate_report(y_true, y_score, threshold=0.5):
     """ Evaluate a trained model using some data
     """
-    # Base classification report (using 0.5 threshold)
-    y_pred = (y_score >= 0.5).astype(int)
+    # Classification report
+    y_pred = (y_score >= threshold).astype(int)
     report = classification_report(
         y_true, y_pred, zero_division=0, output_dict=True)
-    report['threshold_base'] = 0.5
-    
-    # Classification report with threhsold optimized on f1-score
-    y_pred_optim = (y_score >= threshold).astype(int)
-    report_optim = classification_report(
-        y_true, y_pred_optim, zero_division=0, output_dict=True)
-    report.update({'%s_optim' % k: v for k, v in report_optim.items()})
-    report['threshold_optim'] = threshold
+    report['threshold'] = threshold
     
     # Auroc and confidence interval
     auroc, auroc_low, auroc_high = auroc_ci(y_true, y_score)
