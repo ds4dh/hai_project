@@ -22,10 +22,8 @@ from warnings import filterwarnings
 filterwarnings('ignore', category=UserWarning, module='pytorch_lightning')
 filterwarnings('ignore', category=RuntimeWarning, module='pytorch_lightning')
 
-# Helper function
-def ABS_JOIN(*args):
-    return os.path.abspath(os.path.join(*args))
 
+ABS_JOIN = lambda *args: os.path.abspath(os.path.join(*args))  # helper function
 DO_HYPER_OPTIM = False
 N_TRAIN_EPOCHS = 500
 N_TRIALS = 100

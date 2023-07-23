@@ -18,10 +18,8 @@ import warnings
 warnings.filterwarnings('ignore', category=UserWarning)
 warnings.filterwarnings('ignore', category=ConvergenceWarning)
 
-# Helper function
-def ABS_JOIN(*args):
-    return os.path.abspath(os.path.join(*args))
 
+ABS_JOIN = lambda *args: os.path.abspath(os.path.join(*args))  # helper function
 DO_HYPER_OPTIM = True
 N_CPUS = 1
 POSITIVE_ID = 1  # label id for 'infected' label

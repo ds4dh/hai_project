@@ -2,6 +2,7 @@ import os
 import csv
 import json
 
+
 OUTPUT_PATH = os.path.join('results', 'tables', 'table_2.csv')
 USE_OPTIMAL_THRESHOLD = True  # if False, use results with threshold = 0.5
 SETTING_CONDS = ['inductive', 'transductive']

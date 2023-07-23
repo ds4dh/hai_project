@@ -11,8 +11,7 @@ from torch_geometric.utils.convert import from_networkx as torch_from_networkx
 from data.data_utils import load_features_and_labels
 
 # Helper function
-def ABS_JOIN(*args):
-    return os.path.abspath(os.path.join(*args))
+ABS_JOIN = lambda *args: os.path.abspath(os.path.join(*args))
 
 # Input file paths
 PROCESSED_DATA_DIR = ABS_JOIN('data', 'processed')

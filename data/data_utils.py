@@ -10,8 +10,7 @@ from pandas.errors import DtypeWarning
 warnings.filterwarnings(action='ignore', category=DtypeWarning)
 
 # Helper function
-def ABS_JOIN(*args):
-    return os.path.abspath(os.path.join(*args))
+ABS_JOIN = lambda *args: os.path.abspath(os.path.join(*args))
 
 # Input file paths
 PATH_ICU_STAYS = 'data/physionet.org/files/mimiciii/1.4/ICUSTAYS.csv.gz'

@@ -3,9 +3,9 @@ import numpy as np
 import pandas as pd
 from tqdm import tqdm
 
+
 # Helper function
-def ABS_JOIN(*args):
-    return os.path.abspath(os.path.join(*args))
+ABS_JOIN = lambda *args: os.path.abspath(os.path.join(*args))
 
 # Input/output file paths
 PATH_ADMISSIONS = 'data/physionet.org/files/mimiciii/1.4/ADMISSIONS.csv.gz'

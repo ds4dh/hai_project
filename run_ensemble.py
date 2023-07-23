@@ -4,6 +4,7 @@ import numpy as np
 from run_gnn import IPCDataset, evaluate_net
 from run_utils import generate_report
 
+
 POOL_STRATEGIES = ['unanimity', 'majority', 'average']
 SETTING_CONDS = ['inductive', 'transductive']
 BALANCED_CONDS = ['under', 'non', 'over']
