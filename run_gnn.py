@@ -28,6 +28,7 @@ def ABS_JOIN(*args):
 
 DO_HYPER_OPTIM = False
 N_TRAIN_EPOCHS = 500
+N_TRIALS = 100
 SETTING_CONDS = ['inductive', 'transductive']
 BALANCED_CONDS = ['under', 'non', 'over']
 LINK_CONDS = ['all', 'wards', 'caregivers', 'no']
@@ -47,7 +48,7 @@ def main():
                 print('New run: %s setting, %s-balanced data, %s link(s)' %
                     (setting_cond, balanced_cond, link_cond))
                 dataset = IPCDataset(setting_cond, balanced_cond, link_cond)
-                logdir = ABS_JOIN(
+                log_dir = ABS_JOIN(
                     'models', 'gnn',
                     '%s_setting' % setting_cond,
                     '%s_balanced' % balanced_cond,
@@ -56,11 +57,11 @@ def main():
                 
                 # Hyper-optimization loop to find best model
                 if DO_HYPER_OPTIM == True:
-                    if os.path.exists(logdir): shutil.rmtree(logdir)  # needed?
-                    os.makedirs(logdir, exist_ok=True)
+                    if os.path.exists(log_dir): shutil.rmtree(log_dir)  # needed?
+                    os.makedirs(log_dir, exist_ok=True)
                     objective = partial(
                         tune_net, dataset=dataset, balanced_cond=balanced_cond,
-                        setting_cond=setting_cond, logdir=logdir,
+                        setting_cond=setting_cond, log_dir=log_dir,
                     )
                     study = optuna.create_study(
                         study_name='run_gnn_pl',
@@ -69,34 +70,36 @@ def main():
                         sampler=optuna.samplers.TPESampler(),
                     )
                     optuna.pruners.SuccessiveHalvingPruner()
-                    study.optimize(objective, n_trials=100, n_jobs=N_CPUS)
+                    study.optimize(objective, n_trials=N_TRIALS, n_jobs=N_CPUS)
                     best_params = study.best_trial.params
                 
                 # Load from the result of a previous hyper-optimization run
                 else:
                     try:
-                        with open(ABS_JOIN(logdir, 'best_params.json'), 'r') as f:
+                        param_path = ABS_JOIN(log_dir, 'best_params.json')
+                        with open(param_path, 'r') as f:
                             best_params = json.load(f)
                     except:
                         continue
                 
                 # Evaluate best model and report best metric
-                test_eval = evaluate_net(dataset, setting_cond, best_params)
-                with open(ABS_JOIN(logdir, 'gnn_report.json'), 'w') as f:
+                test_eval = evaluate_net(
+                    dataset, best_params, setting_cond, log_dir)
+                with open(ABS_JOIN(log_dir, 'gnn_report.json'), 'w') as f:
                     json.dump(test_eval['report'], f, indent=4)
-                with open(ABS_JOIN(logdir, 'best_params.json'), 'w') as f:
+                with open(ABS_JOIN(log_dir, 'gnn_best_params.json'), 'w') as f:
                     json.dump(best_params, f, indent=4)
 
 
 def evaluate_net(dataset: Data,
                  params: dict,
                  setting_cond: str,
-                 logdir: str
+                 log_dir: str
                  ) -> dict:
     """ Train a model and evaluate it with test dataset
     """
     pl_model = PLWrapperNet(params, dataset, setting_cond)
-    trainer = train_model(pl_model, logdir)  # retrain model (very short)
+    trainer = train_model(pl_model, log_dir)  # retrain model (very short)
     pl_model.optimize_threshold = True  # set threshold optimization
     trainer.validate(pl_model, ckpt_path='best')  # find best threshold
     trainer.test(pl_model, ckpt_path='best')  # evaluate model
@@ -107,7 +110,7 @@ def tune_net(trial: optuna.trial.Trial,
              dataset: Data,
              balanced_cond: str,
              setting_cond: str,
-             logdir: str,
+             log_dir: str,
              ) -> float:
     """ Tune hyper-parameters of a GNN for HAI prediction task
     """
@@ -130,7 +133,7 @@ def tune_net(trial: optuna.trial.Trial,
         'w_balance': trial.suggest_float('w_balance', 1e1, 1e3, log=True),
     }
     pl_model = PLWrapperNet(config, dataset, setting_cond)
-    trainer = train_model(pl_model, logdir, trial)
+    trainer = train_model(pl_model, log_dir, trial)
     
     # Report objective value (auroc) using best checkpoint during training
     objective_value = trainer.validate(ckpt_path='best')[0]['dev_auroc']
@@ -286,7 +289,7 @@ class PLWrapperNet(pl.LightningModule):
             y_train = whole_data.y[whole_data.masks['train']]
             y_dev = whole_data.y[whole_data.masks['dev']]
         
-        # Create train and dev balanced weights
+        # Create train and dev balanced weights (now: w_balance = parameter)
         # w_balance = ((y_train == 0).sum() / (y_train == 1).sum()).item()
         w_train = torch.tensor([1 if g == 0 else w_balance for g in y_train])
         w_dev = torch.tensor([1 if g == 0 else w_balance for g in y_dev])

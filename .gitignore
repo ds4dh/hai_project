@@ -165,4 +165,5 @@ models/*
 data/physionet.org/*
 data/processed/*
 *.joblib
+*.pkl
 catboost_info/*

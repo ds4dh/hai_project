@@ -6,7 +6,8 @@ OUTPUT_PATH = os.path.join('results', 'tables', 'table_2.csv')
 USE_OPTIMAL_THRESHOLD = True  # if False, use results with threshold = 0.5
 SETTING_CONDS = ['inductive', 'transductive']
 BALANCED_CONDS = ['under', 'non', 'over']
-LINK_CONDS = ['all', 'wards', 'caregivers', 'ensemble']  #, 'no']
+LINK_CONDS = ['all', 'wards', 'caregivers', 'no',
+              'ensemble_average', 'ensemble_majority', 'ensemble_unanimity']
 CONTROL_MODEL_NAMES = [
     'logistic_regression',
     'random_forest',
@@ -50,8 +51,7 @@ def main():
             for link_cond in LINK_CONDS:
                 ckpt_dir = os.path.join('models', 'gnn')
                 try:
-                    model_row = get_model_row(
-                        ckpt_dir, 'gnn', balanced_cond, setting_cond, link_cond)
+                    model_row = get_model_row(ckpt_dir, 'gnn', balanced_cond, setting_cond, link_cond)
                     result_dicts.append(model_row)
                 except:
                     pass
@@ -66,14 +66,15 @@ def get_model_row(ckpt_dir: str,
                   setting_cond: str='-',
                   link_cond: str='-',
                   ) -> None:
-    """ Lalalala
+    """ Print one row that summarizes one model results
     """
     # Load report data
     report_filename = os.path.join(
         ckpt_dir, 
         '%s_setting' % setting_cond if setting_cond != '-' else '',
         '%s_balanced' % balanced_cond,
-        '%s_links' % link_cond if link_cond != '-' else '',
+        link_cond if 'ensemble' in link_cond else\
+            '%s_links' % link_cond if link_cond != '-' else '',
         model_type + '_report.json'
     )
     with open(report_filename, 'r') as f: report = json.load(f)

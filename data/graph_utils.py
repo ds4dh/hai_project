@@ -204,28 +204,28 @@ def account_for_duplicate_nodes(node_ids: pd.Index,
             # Add new edges for updated node ids, copying original node edges
             for new_node_id in new_node_ids:
                 new_edges = edges[(edges['src'] == node_id) |
-                                (edges['dst'] == node_id)]\
-                                .replace(node_id, new_node_id)
+                                  (edges['dst'] == node_id)]\
+                                  .replace(node_id, new_node_id)
                 edges_to_add.append(new_edges)
     
-    # Update and return new node_ids and edges
+    # Update and return new node_ids and edges (note that "append" returns)
     node_ids = node_ids.unique().append(pd.Index(node_ids_to_add))
     edges = pd.concat([edges] + edges_to_add, ignore_index=True)
     return node_ids, edges
 
 
-def load_graph_features_and_labels(setting_cond, balanced_cond, link_cond):
+def load_graph_features_and_labels(conds, node2vec_dim):
     """ Load features from embeddings built with node2vec (word2vec trained on
         node sequences using a random edge-walker)
     """
-    dataset = IPCDataset(setting_cond, balanced_cond, link_cond, 'stellar')
+    dataset = IPCDataset(**conds, node2vec_dim=node2vec_dim)
     X, y = {}, {}
-    if setting_cond == 'inductive':
+    if conds['setting_cond'] == 'inductive':
         for split in ['train', 'dev', 'test']:
             data = dataset.get_split(split)
             X[split] = data.x.numpy()
             y[split] = data.y.numpy()
-    elif setting_cond == 'transductive':
+    elif conds['setting_cond'] == 'transductive':
         data = dataset.get_split('whole')
         for split in ['train', 'dev', 'test']:
             X[split] = data.x[data.masks[split]].numpy()
@@ -238,7 +238,8 @@ class IPCDataset(InMemoryDataset):
                  setting_cond: str,
                  balanced_cond: str,
                  link_cond: str,
-                 format: str='torch'):
+                 node2vec_dim: int=None,
+                 *args, **kwargs):
         """ Dataset containing graph data, and node indices for train, dev and
             test dataset (in case of transductive setting)
         """
@@ -248,7 +249,7 @@ class IPCDataset(InMemoryDataset):
         self.setting_cond = setting_cond
         self.balanced_cond = balanced_cond
         self.link_cond = link_cond
-        self.format = format
+        self.node2vec_dim = node2vec_dim
         X, y, ids = load_features_and_labels(balanced_cond)
         split_list = []
         
@@ -319,10 +320,10 @@ class IPCDataset(InMemoryDataset):
             
         # Add edges and return pytorch-geometric or stellar-graph object
         nx_graph.add_edges_from(edges.values)
-        if self.format == 'torch':
+        if self.node2vec_dim == None:
             return torch_from_networkx(nx_graph)
-        elif self.format == 'stellar':
-            return self.create_embedded_graph(nx_graph, split)
+        else:
+            return self.create_graph_embeddings(nx_graph, split)
     
     def create_random_walks(self,
                             graph,
@@ -343,19 +344,20 @@ class IPCDataset(InMemoryDataset):
         )
         return random_walks
     
-    def create_embedded_graph(self,
-                              nx_graph: nx.Graph,
-                              split: str='',  # for checkpoint retrieval
-                              dim: int=128,
-                              window: int=5,
-                              ) -> list[np.ndarray]:
+    def create_graph_embeddings(self,
+                                nx_graph: nx.Graph,
+                                split: str='',  # for checkpoint retrieval
+                                window: int=5,
+                                ) -> list[np.ndarray]:
         # Initialize data checkpoint path
-        pickle_path = ABS_JOIN(PROCESSED_DATA_DIR,
-                               '%s_balanced' % self.balanced_cond,
-                               'stellar',
-                               '%s_setting' % self.setting_cond,
-                               '%s_links' % self.link_cond,
-                               'node_embeddings_%s' % split)
+        pickle_path = ABS_JOIN(
+            PROCESSED_DATA_DIR,
+            '%s_balanced' % self.balanced_cond,
+            'stellar',
+            '%s_setting' % self.setting_cond,
+            '%s_links' % self.link_cond,
+            'node_embeddings_%s_%s' % (self.node2vec_dim, split)
+        )
         
         # Load checkpoint if data is already generated
         loading_failed = False
@@ -366,15 +368,16 @@ class IPCDataset(InMemoryDataset):
             except:
                 loading_failed = True
                 
-        # Else, regenerate node embeddings
+        # Else, or if loading failed, regenerate node embeddings
         if REGENERATE_STELLAR_DATA_FROM_SCRATCH or loading_failed:
             os.makedirs(os.path.split(pickle_path)[0], exist_ok=True)
             stellar_graph = StellarGraph.from_networkx(nx_graph)
             walks = self.create_random_walks(stellar_graph)
             str_walks = [[str(n) for n in walk] for walk in walks]
-            model = Word2Vec(str_walks, vector_size=dim, window=window, sg=1)
+            word2vec_model = Word2Vec(
+                str_walks, vector_size=self.node2vec_dim, window=window, sg=1)
             nodes = list(stellar_graph.nodes())
-            node_embeddings = [model.wv[str(node)] for node in nodes]
+            node_embeddings = [word2vec_model.wv[str(node)] for node in nodes]
             with open(pickle_path, 'wb') as f:
                 pickle.dump(node_embeddings, f)
         

@@ -125,7 +125,7 @@ def main():
     )
     
     # Retrieve model
-    param_path = os.path.join(log_dir, 'best_params.json')
+    param_path = os.path.join(log_dir, 'gnn_best_params.json')
     with open(param_path, 'r') as f: params = json.load(f)
     
     # Retrieve relevant data info (by sample index)
@@ -157,7 +157,7 @@ def plot_results_by_category(test_info, y_score):
         colors = BAR_PLOT_COLORS[:len(cats)]
         axs[i].bar(
             cats, aurocs, yerr=[auroc_lows, auroc_highs], zorder=10, alpha=0.85,
-            color=colors, capsize=7, label=cats, align='center', ecolor='black', 
+            color=colors, capsize=7, label=cats, align='center', ecolor='black',
         )
         
         # Polish figure
@@ -170,8 +170,7 @@ def plot_results_by_category(test_info, y_score):
         handles = [plt.Rectangle((0, 0), 1, 1, color=colors[i]) for i, _ in enumerate(cats)]
         axs[i].legend(handles, cats, loc='upper center', ncol=2, bbox_to_anchor=(0.5, -0.1))
         axs[i].text(-0.15, 1.0, CAT_TITLES[cond_key]['letter'], transform=axs[i].transAxes,
-                    fontsize='x-large', fontweight='bold', va='top', ha='right')
-
+                    fontsize='x-large', va='top', ha='right')
         
     # Save figure
     plt.tight_layout()
