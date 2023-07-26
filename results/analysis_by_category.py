@@ -5,17 +5,19 @@ import json
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+import matplotlib.lines as mlines
 from data.data_utils import load_features_and_labels
-from run_gnn import IPCDataset, evaluate_net
+from run_gnn import IPCDataset, evaluate_model, get_ckpt_dir, load_best_params
 from run_utils import auroc_ci
 
 
-OUTPUT_PATH = os.path.join('results', 'figures', 'figure_4.png')
-BEST_MODEL_RUN = {
-    'setting_cond': 'inductive',
-    'balanced_cond': 'non',
-    'link_cond': 'wards',
+MODEL_RUN = {
+    'setting_cond': 'ensemble',  # ensemble, inductive, transductive
+    'balanced_cond': 'non',  # only relevant with setting_cond = in/trans-ductive
+    'link_cond': 'wards',  # only relevant with setting_cond = in/trans-ductive
 }
+FIGURE_FILE = 'figure_4_%s.png' % MODEL_RUN['setting_cond']
+OUTPUT_PATH = os.path.join('results', 'figures', FIGURE_FILE)
 BAR_PLOT_COLORS = [
     (0.627, 0.306, 0.310),
     (0.353, 0.463, 0.553),
@@ -112,30 +114,30 @@ def main():
     """ Train best model in the best setting, data balance, and link condition,
         then check performance for different MDR categories
     """
-    # Initialize dataset and result directory, given conditions
-    setting_cond = BEST_MODEL_RUN['setting_cond']
-    balanced_cond = BEST_MODEL_RUN['balanced_cond']
-    link_cond = BEST_MODEL_RUN['link_cond']
-    dataset = IPCDataset(setting_cond, balanced_cond, link_cond)
-    log_dir = os.path.join(
-        'models', 'gnn',
-        '%s_setting' % setting_cond,
-        '%s_balanced' % balanced_cond,
-        '%s_links' % link_cond
-    )
-    
-    # Retrieve model
-    param_path = os.path.join(log_dir, 'gnn_best_params.json')
-    with open(param_path, 'r') as f: params = json.load(f)
+    # Initialize dataset and model hyper-parameters, given conditions
+    if 'ensemble' in MODEL_RUN['setting_cond']:
+        log_dir = os.path.join('models', 'all')
+    else:
+        dataset = IPCDataset(**MODEL_RUN)
+        log_dir = get_ckpt_dir(MODEL_RUN)
+        params = load_best_params(log_dir)
     
     # Retrieve relevant data info (by sample index)
-    _, _, ids = load_features_and_labels(balanced=balanced_cond)
+    _, _, ids = load_features_and_labels(balanced=MODEL_RUN['balanced_cond'])
     data_dir = os.path.join('data', 'processed')
     sample_info = pd.read_csv(os.path.join(data_dir, 'patient-ward_info.csv'))
     test_info = sample_info.loc[ids['test']]
     
     # Generate predictions and plot them for different set of categories
-    y_score = evaluate_net(dataset, params, setting_cond, log_dir)['y_score']
+    if 'ensemble' in MODEL_RUN['setting_cond']:
+        report_file = 'ensemble_average_report.json'
+        report_path = os.path.join(log_dir, report_file)
+        with open(report_path, 'r') as f: report = json.load(f)
+        y_score = np.array(report['y_score_optim'])
+    else:
+        metrics = evaluate_model(
+            dataset, params, MODEL_RUN['setting_cond'], log_dir)
+        y_score = metrics['y_score']
     plot_results_by_category(test_info, y_score)
     
     
@@ -144,7 +146,7 @@ def plot_results_by_category(test_info, y_score):
         on several bar plots
     """
     # Gather test results and plot them for each set of categories
-    _, axs = plt.subplots(1, len(CAT_CONDS), figsize=(len(CAT_CONDS) * 4, 5))
+    _, axs = plt.subplots(1, len(CAT_CONDS), figsize=(len(CAT_CONDS) * 4.5, 5))
     for i, (cond_key, cond_dict) in enumerate(CAT_CONDS.items()):
         
         # Compute metrics for this category
@@ -157,26 +159,31 @@ def plot_results_by_category(test_info, y_score):
         colors = BAR_PLOT_COLORS[:len(cats)]
         axs[i].bar(
             cats, aurocs, yerr=[auroc_lows, auroc_highs], zorder=10, alpha=0.85,
-            color=colors, capsize=7, label=cats, align='center', ecolor='black',
+            color=colors, capsize=5, label=cats, align='center', ecolor='black',
         )
         
         # Polish figure
-        axs[i].set_ylabel('AUROC', fontsize='large')
-        axs[i].set_xlabel(CAT_TITLES[cond_key]['label'], fontsize='large')
+        axs[i].set_ylabel('AUROC', fontsize='x-large')
+        axs[i].set_xlabel(CAT_TITLES[cond_key]['label'], fontsize='x-large')
         axs[i].set_ylim([0.0, 1.05])
         axs[i].set_xticklabels([])
+        axs[i].tick_params(axis='y', labelsize='large')
         axs[i].yaxis.grid(True, color=(0.8, 0.8, 0.8))
         axs[i].xaxis.grid(True, color=(0.8, 0.8, 0.8))
-        handles = [plt.Rectangle((0, 0), 1, 1, color=colors[i]) for i, _ in enumerate(cats)]
-        axs[i].legend(handles, cats, loc='upper center', ncol=2, bbox_to_anchor=(0.5, -0.1))
-        axs[i].text(-0.15, 1.0, CAT_TITLES[cond_key]['letter'], transform=axs[i].transAxes,
-                    fontsize='x-large', va='top', ha='right')
+        handles = [mlines.Line2D(
+            [], [], color=colors[i], marker='s', linestyle='None',
+            markersize=10, markeredgecolor='black') for i, _ in enumerate(cats)]
+        axs[i].text(-0.17, 1.0, CAT_TITLES[cond_key]['letter'], va='top',
+                    ha='right', fontsize='xx-large', transform=axs[i].transAxes)
+        axs[i].legend(handles, cats, fontsize=14, ncol=2, loc='upper center',
+                      bbox_to_anchor=(0.5, -0.1, 0.0, 0.0), columnspacing=0.5,
+                      handletextpad=0.1)
         
     # Save figure
-    plt.tight_layout()
-    plt.savefig(OUTPUT_PATH, dpi=300)
-
-
+    plt.subplots_adjust(wspace=0.3)
+    plt.savefig(OUTPUT_PATH, dpi=300, bbox_inches='tight')
+    
+    
 def compute_metrics(test_info, y_score, cond_key, cond_dict):
     """ Compute auroc and confidence interval for different categories that
         belong to a specific category set

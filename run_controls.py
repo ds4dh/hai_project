@@ -20,10 +20,10 @@ warnings.filterwarnings('ignore', category=ConvergenceWarning)
 
 
 ABS_JOIN = lambda *args: os.path.abspath(os.path.join(*args))  # helper function
-DO_HYPER_OPTIM = True
+DO_HYPER_OPTIM = False
 N_CPUS = 1
 POSITIVE_ID = 1  # label id for 'infected' label
-N_TRIALS = 100
+N_HYPER_OPTIM_TRIALS = 100
 SETTING_CONDS = ['inductive', 'transductive']  # only used if graph features
 LINK_CONDS = ['all', 'wards', 'caregivers', 'no']  # only used if graph features
 BALANCED_CONDS = ['under', 'non', 'over']
@@ -131,7 +131,7 @@ def find_best_params(X: np.ndarray,
         pruner=MedianPruner(n_warmup_steps=50),
         sampler=TPESampler(),
     )
-    study.optimize(objective, n_trials=N_TRIALS, n_jobs=N_CPUS)
+    study.optimize(objective, n_trials=N_HYPER_OPTIM_TRIALS, n_jobs=N_CPUS)
     return study.best_trial.params
     
     

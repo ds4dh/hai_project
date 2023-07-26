@@ -14,9 +14,8 @@ from torch.utils.data import DataLoader
 from torch_geometric.nn import GCNConv, GATConv, SAGEConv
 from torch_geometric.data import Data
 from data.graph_utils import IPCDataset
-from optuna.integration import PyTorchLightningPruningCallback as PLPruningCallback
+from optuna.integration import PyTorchLightningPruningCallback as PLPruneCallback
 from functools import partial
-from sklearn.metrics import roc_auc_score
 from run_utils import FocalLoss, generate_report, find_optimal_threshold
 from warnings import filterwarnings
 filterwarnings('ignore', category=UserWarning, module='pytorch_lightning')
@@ -26,7 +25,7 @@ filterwarnings('ignore', category=RuntimeWarning, module='pytorch_lightning')
 ABS_JOIN = lambda *args: os.path.abspath(os.path.join(*args))  # helper function
 DO_HYPER_OPTIM = False
 N_TRAIN_EPOCHS = 500
-N_TRIALS = 100
+N_HYPER_OPTIM_TRIALS = 100
 SETTING_CONDS = ['inductive', 'transductive']
 BALANCED_CONDS = ['under', 'non', 'over']
 LINK_CONDS = ['all', 'wards', 'caregivers', 'no']
@@ -45,43 +44,20 @@ def main():
                 # Initialize dataset and result directory, given conditions
                 print('New run: %s setting, %s-balanced data, %s link(s)' %
                     (setting_cond, balanced_cond, link_cond))
-                dataset = IPCDataset(setting_cond, balanced_cond, link_cond)
-                log_dir = ABS_JOIN(
-                    'models', 'gnn',
-                    '%s_setting' % setting_cond,
-                    '%s_balanced' % balanced_cond,
-                    '%s_links' % link_cond
-                )
+                conds = {'feat_cond': 'edges', 'balanced_cond': balanced_cond,
+                         'setting_cond': setting_cond, 'link_cond': link_cond}
+                dataset = IPCDataset(**conds)
+                log_dir = get_ckpt_dir(conds)
                 
-                # Hyper-optimization loop to find best model
-                if DO_HYPER_OPTIM == True:
-                    if os.path.exists(log_dir): shutil.rmtree(log_dir)  # needed?
-                    os.makedirs(log_dir, exist_ok=True)
-                    objective = partial(
-                        tune_net, dataset=dataset, balanced_cond=balanced_cond,
-                        setting_cond=setting_cond, log_dir=log_dir,
-                    )
-                    study = optuna.create_study(
-                        study_name='run_gnn_pl',
-                        direction='maximize',
-                        pruner=optuna.pruners.MedianPruner(n_warmup_steps=50),
-                        sampler=optuna.samplers.TPESampler(),
-                    )
-                    optuna.pruners.SuccessiveHalvingPruner()
-                    study.optimize(objective, n_trials=N_TRIALS, n_jobs=N_CPUS)
-                    best_params = study.best_trial.params
-                
-                # Load from the result of a previous hyper-optimization run
+                # Load or find best parameters for the model
+                if DO_HYPER_OPTIM:
+                    best_params = find_best_params(dataset, conds, log_dir)
                 else:
-                    try:
-                        param_path = ABS_JOIN(log_dir, 'best_params.json')
-                        with open(param_path, 'r') as f:
-                            best_params = json.load(f)
-                    except:
-                        continue
+                    best_params = load_best_params(log_dir)
+                    if best_params == None: return  # model that have not been run yet
                 
                 # Evaluate best model and report best metric
-                test_eval = evaluate_net(
+                test_eval = evaluate_model(
                     dataset, best_params, setting_cond, log_dir)
                 with open(ABS_JOIN(log_dir, 'gnn_report.json'), 'w') as f:
                     json.dump(test_eval['report'], f, indent=4)
@@ -89,11 +65,57 @@ def main():
                     json.dump(best_params, f, indent=4)
 
 
-def evaluate_net(dataset: Data,
-                 params: dict,
-                 setting_cond: str,
-                 log_dir: str
-                 ) -> dict:
+def get_ckpt_dir(conds: dict[str, str]) -> str:
+    """ Get correct log dir for a given set of conditions
+    """
+    ckpt_dir = ABS_JOIN(
+        'models', 'gnn',
+        '%s_setting' % conds['setting_cond'],
+        '%s_balanced' % conds['balanced_cond'],
+        '%s_links' % conds['link_cond']
+    )
+    return ckpt_dir
+
+
+def find_best_params(dataset: Data,
+                     conds: dict[str, str],
+                     log_dir: str
+                     ) -> dict:
+    """ Use hyper-optimization to find best model hyper-parameters
+    """
+    if os.path.exists(log_dir): shutil.rmtree(log_dir)  # needed?
+    os.makedirs(log_dir, exist_ok=True)
+    objective = partial(
+        tune_net, dataset=dataset, balanced_cond=conds['balanced_cond'],
+        setting_cond=conds['setting_cond'], log_dir=log_dir,
+    )
+    study = optuna.create_study(
+        study_name='run_gnn_pl',
+        direction='maximize',
+        pruner=optuna.pruners.MedianPruner(n_warmup_steps=50),
+        sampler=optuna.samplers.TPESampler(),
+    )
+    study.optimize(objective, n_trials=N_HYPER_OPTIM_TRIALS, n_jobs=N_CPUS)
+    return study.best_trial.params
+    
+
+def load_best_params(log_dir: str) -> dict:
+    """ Load best hyper-parameters from a previously run hyper-optimization
+    """
+    try:
+        param_path = ABS_JOIN(log_dir, 'gnn_best_params.json')
+        with open(param_path, 'r') as f:
+            return json.load(f)
+    except:
+        print('Parameter file not found!')
+        return None
+    
+
+def evaluate_model(dataset: Data,
+                   params: dict,
+                   setting_cond: str,
+                   log_dir: str
+                   ) -> dict:
     """ Train a model and evaluate it with test dataset
     """
     pl_model = PLWrapperNet(params, dataset, setting_cond)
@@ -148,7 +170,7 @@ def train_model(pl_model: pl.LightningModule,
     logger = TensorBoardLogger(logdir, name='logs')
     callbacks = [EarlyStopping(monitor='dev_loss', mode='min', patience=5)]
     if trial is not None:
-        callbacks.append(PLPruningCallback(trial, monitor='dev_auroc'))
+        callbacks.append(PLPruneCallback(trial, monitor='dev_auroc'))
     else:
         print('\n/!\ Retraining best model identified by optuna study /!\ \n')
     

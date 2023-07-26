@@ -1,109 +1,144 @@
 import os
 import json
 import numpy as np
-from run_gnn import IPCDataset, evaluate_net
-from run_utils import generate_report
+from run_utils import generate_report, find_optimal_threshold
+from run_gnn import (
+    IPCDataset,
+    load_best_params as load_best_params_gnn,
+    evaluate_model as evaluate_model_gnn,
+    get_ckpt_dir as get_ckpt_dir_gnn,
+)
+from run_controls import (
+    load_best_params as load_best_params_ctrl,
+    evaluate_model as evaluate_model_ctrl,
+    load_correct_data as load_correct_data_ctrl,
+    get_ckpt_dir as get_ckpt_dir_ctrl,
+)
 
 
 POOL_STRATEGIES = ['unanimity', 'majority', 'average']
 SETTING_CONDS = ['inductive', 'transductive']
 BALANCED_CONDS = ['under', 'non', 'over']
 LINK_CONDS = ['all', 'wards', 'caregivers']  # , 'no']
+CONTROL_MODELS = ['random_forest', 'knn', 'catboost', 'logistic_regression']
+POSSIBLE_CONTROL_MODELS_FOR_ENSEMBLE = CONTROL_MODELS
+POSSIBLE_GNN_MODELS_FOR_ENSEMBLE = ['gnn-inductive', 'gnn-transductive']
+SELECTED_MODELS = ['gnn-inductive', 'random_forest', 'catboost']
 
 
 def main():
-    # run_control_ensemble()
-    # run_control_edge_ensemble()
-    run_gnn_ensemble()
-
-
-def run_control_ensemble():
-    ...
-
-
-def run_control_edge_ensemble():
-    """ Train control models that use node features, as well as node2vec edge
-        features in different settings, data balance and link conditions
-    """
-    for setting_cond in SETTING_CONDS:
-        for balanced_cond in BALANCED_CONDS:
-            y_true_list, y_score_list, thresh_optim_list = [], [], []
-            for link_cond in LINK_CONDS:
-                
-                # Initialize dataset and result directory, given conditions
-                print('New run: %s setting, %s-balanced data, %s link(s)' %
-                    (setting_cond, balanced_cond, link_cond))
-                dataset = IPCDataset(setting_cond, balanced_cond, link_cond)
-                log_dir = os.path.join(
-                    'models', 'edge_features',
-                    '%s_setting' % setting_cond,
-                    '%s_balanced' % balanced_cond,
-                    '%s_links' % link_cond
-                )
-                
-                # Retrieve model
-                try:
-                    param_path = os.path.join(log_dir, 'best_params.json')
-                    with open(param_path, 'r') as f:
-                        params = json.load(f)
-                except:
-                    pass
-                
-                # Generate predictions
-                test_eval = evaluate_net(dataset, params, setting_cond, log_dir)
-                y_true_list.append(test_eval['y_true'])
-                y_score_list.append(test_eval['y_score'])
-                thresh_optim_list.append(test_eval['report']['threshold_optim'])
-                
-                # Use individual predictions to evaluate ensemble predictions
-                out_dir = log_dir.replace('%s_links' % link_cond, 'ensemble')
-                evaluate_ensemble_predictions(
-                    y_true_list, y_score_list, thresh_optim_list, out_dir)
+    # run_gnn_ensemble()  # pooled over link conditions
+    # run_control_ensemble()  # pooled over control models
+    run_selected_ensemble()  # pooled over selection of models
     
-
+            
 def run_gnn_ensemble():
-    """ Train a GNN in different settings, data balance and link conditions
+    """ Train a GNN in different settings, data balance and link conditions and
+        generate predictions with all models using different voting strategies
     """
     for setting_cond in SETTING_CONDS:
         for balanced_cond in BALANCED_CONDS:
             y_true_list, y_score_list, thresh_optim_list = [], [], []
             for link_cond in LINK_CONDS:
                 
-                # Initialize dataset and result directory, given conditions
+                # Initialize dataset and model parameters, given conditions
                 print('New run: %s setting, %s-balanced data, %s link(s)' %
-                    (setting_cond, balanced_cond, link_cond))
-                dataset = IPCDataset(setting_cond, balanced_cond, link_cond)
-                log_dir = os.path.join(
-                    'models', 'gnn',
-                    '%s_setting' % setting_cond,
-                    '%s_balanced' % balanced_cond,
-                    '%s_links' % link_cond
-                )
+                     (setting_cond, balanced_cond, link_cond))
+                conds = {'feat_cond': 'edges', 'balanced_cond': balanced_cond,
+                         'setting_cond': setting_cond, 'link_cond': link_cond}
+                dataset = IPCDataset(**conds)
+                log_dir = get_ckpt_dir_gnn(conds)
+                params = load_best_params_gnn(log_dir)
                 
-                # Retrieve model
-                try:
-                    param_path = os.path.join(log_dir, 'best_params.json')
-                    with open(param_path, 'r') as f:
-                        params = json.load(f)
-                except:
-                    pass
-                
-                # Generate predictions
-                test_eval = evaluate_net(dataset, params, setting_cond, log_dir)
+                # Generate predictions and collect f1-optimal threshold
+                test_eval = evaluate_model_gnn(
+                    dataset, params, setting_cond, log_dir)
+                thresh_optim = find_optimal_threshold(
+                    test_eval['y_true'], test_eval['y_score'])
                 y_true_list.append(test_eval['y_true'])
                 y_score_list.append(test_eval['y_score'])
-                thresh_optim_list.append(test_eval['report']['threshold_optim'])
+                thresh_optim_list.append(thresh_optim)
                 
                 # Use individual predictions to evaluate ensemble predictions
-                out_dir = log_dir.replace('%s_links' % link_cond, 'ensemble')
+                out_dir = log_dir.replace('%s_links' % link_cond, 'ensemble_#S#')
+                out_path = os.path.join(out_dir, 'gnn_report.json')
                 evaluate_ensemble_predictions(
-                    y_true_list, y_score_list, thresh_optim_list, out_dir)
-
-
+                    y_true_list, y_score_list, thresh_optim_list, out_path)
+                
+                
+def run_control_ensemble():
+    """ Train control models in different data balance conditions and generate
+        predictions with all models using different voting strategies
+    """
+    for balanced_cond in BALANCED_CONDS:
+        y_true_list, y_score_list, thresh_optim_list = [], [], []
+        for model in CONTROL_MODELS:
+            # Initialize dataset and model parameters, given conditions
+            print('New run: %s-balanced data, %s model' % (balanced_cond, model))
+            conds = {'feat_cond': 'nodes', 'balanced_cond': balanced_cond}
+            best_params = load_best_params_ctrl(conds, name=model)
+            X, y = load_correct_data_ctrl(conds)
+            
+            # Generate y-scores with the model, using the testing dataset
+            _, y_score = evaluate_model_ctrl(X, y, model, best_params)
+            thresh_optim = find_optimal_threshold(y['test'], y_score)
+            y_true_list.append(y['test'])
+            y_score_list.append(y_score)
+            thresh_optim_list.append(thresh_optim)
+            
+        # Use individual predictions to evaluate ensemble predictions
+        out_dir = get_ckpt_dir_ctrl(conds)
+        out_path = os.path.join(out_dir, 'ensemble_#S#_report.json')
+        evaluate_ensemble_predictions(
+            y_true_list, y_score_list, thresh_optim_list, out_path)
+            
+            
+def run_selected_ensemble():
+    """ Train control and gnn models in different data balance conditions and
+        generate predictions with all models using different voting strategies
+    """
+    for balanced_cond in ['non']:  # others turned out to be worse in most cases
+        y_true_list, y_score_list, thresh_optim_list = [], [], []
+        for model in SELECTED_MODELS:
+            
+            # Initialize dataset and result directory, given conditions
+            print('New run: %s-balanced data, %s model' % (balanced_cond, model))
+            setting_cond = model.split('-')[-1]
+            conds = {'feat_cond': 'nodes', 'balanced_cond': balanced_cond,
+                     'link_cond': 'wards', 'setting_cond': setting_cond}
+            if model in POSSIBLE_CONTROL_MODELS_FOR_ENSEMBLE:
+                out_dir = get_ckpt_dir_ctrl(conds)
+                params = load_best_params_ctrl(conds, name=model)
+                X, y = load_correct_data_ctrl(conds)
+                y_true = y['test']
+            elif model in POSSIBLE_GNN_MODELS_FOR_ENSEMBLE:
+                out_dir = get_ckpt_dir_gnn(conds)
+                params = load_best_params_gnn(out_dir)
+                dataset = IPCDataset(**conds)
+            
+            # Generate y-scores with the model, using the testing dataset
+            if model in POSSIBLE_CONTROL_MODELS_FOR_ENSEMBLE:
+                _, y_score = evaluate_model_ctrl(X, y, model, params)
+            elif model in POSSIBLE_GNN_MODELS_FOR_ENSEMBLE:
+                test_eval = evaluate_model_gnn(
+                    dataset, params, conds['setting_cond'], out_dir)
+                y_true = test_eval['y_true']
+                y_score = test_eval['y_score']
+            thresh_optim = find_optimal_threshold(y_true, y_score)
+            y_true_list.append(y_true)
+            y_score_list.append(y_score)
+            thresh_optim_list.append(thresh_optim)
+            
+        # Use individual predictions to evaluate ensemble predictions
+        out_path = os.path.join('models', 'all', 'ensemble_#S#_report.json')
+        evaluate_ensemble_predictions(
+            y_true_list, y_score_list, thresh_optim_list, out_path)
+        
+        
 def evaluate_ensemble_predictions(y_true_list: list[list[int]],
                                   y_score_list: list[list[float]],
                                   thresh_optim_list: list[float],
-                                  out_dir: str,
+                                  out_path: str,
                                   ) -> None:
         """ Generate ensemble predictions and evaluate them
         """
@@ -116,18 +151,20 @@ def evaluate_ensemble_predictions(y_true_list: list[list[int]],
             y_score, threshold = generate_ensemble_predictions(
                 y_score_list, thresh_base_list, strategy)
             report = generate_report(y_true, y_score, threshold)
+            report.update({'y_score': y_score.tolist()})
             
             # F1-score optimized individual thresholds
             y_score, threshold = generate_ensemble_predictions(
                 y_score_list, thresh_optim_list, strategy)
             report_optim = generate_report(y_true, y_score, threshold)
+            report_optim.update({'y_score': y_score.tolist()})
             report.update({'%s_optim' % k: v for k, v in report_optim.items()})
             
             # Write whole report
-            out_dir_ = '%s_%s' % (out_dir, strategy)
-            os.makedirs(out_dir_, exist_ok=True)
-            report_path = os.path.join(out_dir_, 'gnn_report.json')
-            with open(report_path, 'w') as f:
+            out_path_ = out_path.replace('#S#', strategy)
+            out_dir = os.path.split(out_path)[0]
+            os.makedirs(out_dir, exist_ok=True)
+            with open(out_path_, 'w') as f:
                 json.dump(report, f, indent=4)
 
 
