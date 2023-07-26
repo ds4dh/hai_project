@@ -160,10 +160,11 @@ cython_debug/
 #.idea/
 
 # Custom
-*report.json
-*/logs
+**report.json
+**/logs
+**.joblib
+**.pkl
+models_backup
 data/physionet.org/*
 data/processed/*
-*.joblib
-*.pkl
 catboost_info/*

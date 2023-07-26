@@ -1,9 +1,0 @@
-{
-    "hidden_dim": 64,
-    "n_layers": 2,
-    "layer": "gcn",
-    "dropout": 0.3,
-    "n_heads": 4,
-    "lr": 0.04902402718432095,
-    "w_balance": 10.915916678591925
-}

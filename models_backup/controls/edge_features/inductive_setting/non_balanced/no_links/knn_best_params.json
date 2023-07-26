@@ -1,6 +1,0 @@
-{
-    "n_neighbors": 29,
-    "weights": "uniform",
-    "p": 3,
-    "algorithm": "ball_tree"
-}

@@ -1,9 +1,0 @@
-{
-    "hidden_dim": 32,
-    "n_layers": 2,
-    "layer": "gat",
-    "dropout": 0.0,
-    "n_heads": 4,
-    "lr": 0.07503867838503965,
-    "w_balance": 11.94525358252002
-}
