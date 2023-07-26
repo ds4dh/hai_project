@@ -1,0 +1,12 @@
+
+*** Using threshold = 0.5 ***
+              precision    recall  f1-score   support
+
+         0.0       1.00      0.47      0.64     53424
+         1.0       0.05      0.99      0.09      1441
+
+    accuracy                           0.49     54865
+   macro avg       0.52      0.73      0.37     54865
+weighted avg       0.97      0.49      0.63     54865
+
+*** AUROC-CI = 0.849 (0.836, 0.861) ***

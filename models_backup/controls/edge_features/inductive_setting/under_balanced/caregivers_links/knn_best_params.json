@@ -1,0 +1,6 @@
+{
+    "n_neighbors": 29,
+    "weights": "distance",
+    "p": 1,
+    "algorithm": "kd_tree"
+}

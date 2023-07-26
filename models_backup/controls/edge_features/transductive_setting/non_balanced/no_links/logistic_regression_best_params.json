@@ -1,0 +1,8 @@
+{
+    "solver": "saga",
+    "C": 0.01,
+    "penalty": "l1",
+    "max_iter": 100,
+    "l1_ratio": 0.4,
+    "class_weight": "balanced"
+}
