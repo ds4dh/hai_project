@@ -4,8 +4,6 @@ import json
 
 
 OUTPUT_BASE_PATH = os.path.join('results', 'tables', 'table')
-USE_OPTIMAL_THRESHOLD = False  # if False, use results with threshold = 0.5
-OPTIM_STR = '_optim' if USE_OPTIMAL_THRESHOLD else ''
 ALL_SETTING_CONDS = ['inductive', 'transductive']
 ALL_BALANCED_CONDS = ['under', 'non', 'over']
 ALL_LINK_CONDS = [
@@ -80,15 +78,17 @@ CONDS_TABLE_3 = [
 
 def main():
     os.makedirs(os.path.split(OUTPUT_BASE_PATH)[0], exist_ok=True)
-    raw_table_path = '%s%s_raw.csv' % (OUTPUT_BASE_PATH, OPTIM_STR)
-    table_2_path = '%s%s_2.csv' % (OUTPUT_BASE_PATH, OPTIM_STR)
-    table_3_path = '%s%s_3.csv' % (OUTPUT_BASE_PATH, OPTIM_STR)
-    compute_raw_results(raw_table_path)
-    write_spec_table(raw_table_path, table_2_path, CONDS_TABLE_2)
-    write_spec_table(raw_table_path, table_3_path, CONDS_TABLE_3)
+    for use_optim_threshold in [True, False]:
+        optim_str = '_optim' if use_optim_threshold else ''
+        raw_table_path = '%s%s_raw.csv' % (OUTPUT_BASE_PATH, optim_str)
+        table_2_path = '%s%s_2.csv' % (OUTPUT_BASE_PATH, optim_str)
+        table_3_path = '%s%s_3.csv' % (OUTPUT_BASE_PATH, optim_str)
+        compute_raw_results(raw_table_path, use_optim_threshold)
+        write_spec_table(raw_table_path, table_2_path, CONDS_TABLE_2)
+        write_spec_table(raw_table_path, table_3_path, CONDS_TABLE_3)
     
     
-def compute_raw_results(raw_table_path):
+def compute_raw_results(raw_table_path, use_optim_threshold):
     """ Check in the logs of all trained models and write a table with all the
         results for all different conditions for all models
     """
@@ -98,7 +98,9 @@ def compute_raw_results(raw_table_path):
         ckpt_dir = os.path.join('models', 'controls', 'node_features')
         for model_name in ALL_CONTROL_MODELS:
             try:
-                model_row = get_model_row(ckpt_dir, model_name, balanced_cond)
+                model_row = get_model_row(
+                    ckpt_dir, model_name, use_optim_threshold,
+                    balanced_cond=balanced_cond)
                 dicts_to_write.append(model_row)
             except:
                 pass
@@ -111,7 +113,8 @@ def compute_raw_results(raw_table_path):
                 for model_name in ALL_CONTROL_MODELS:
                     try:
                         model_row = get_model_row(ckpt_dir, model_name,
-                            balanced_cond, setting_cond, link_cond)
+                            use_optim_threshold, balanced_cond=balanced_cond,
+                            setting_cond=setting_cond, link_cond=link_cond)
                         dicts_to_write.append(model_row)
                     except:
                         pass
@@ -124,8 +127,9 @@ def compute_raw_results(raw_table_path):
                 ckpt_dir = os.path.join('models', model_name)
                 try:
                     model_row = get_model_row(
-                        ckpt_dir, model_name,
-                        balanced_cond, setting_cond, link_cond)
+                        ckpt_dir, model_name, use_optim_threshold,
+                        balanced_cond=balanced_cond, setting_cond=setting_cond,
+                        link_cond=link_cond)
                     dicts_to_write.append(model_row)
                 except:
                     pass
@@ -133,7 +137,7 @@ def compute_raw_results(raw_table_path):
     # Finally, check ensemble model (all)
     ckpt_dir = os.path.join('models', 'all')
     model_name = 'ensemble_average'
-    model_row = get_model_row(ckpt_dir, 'ensemble_average')
+    model_row = get_model_row(ckpt_dir, 'ensemble_average', use_optim_threshold)
     dicts_to_write.append(model_row)
     
     # Build final table
@@ -142,6 +146,7 @@ def compute_raw_results(raw_table_path):
 
 def get_model_row(ckpt_dir: str,
                   model_name: str,
+                  use_optim_threshold: bool,
                   balanced_cond: str='-',
                   setting_cond: str='-',
                   link_cond: str='-',
@@ -162,8 +167,8 @@ def get_model_row(ckpt_dir: str,
     if 'ensemble' in model_name: model_name = 'all_%s' % model_name
     
     # Return a dict formatted for a table ({column_name: metric value})
-    accuracy_key = 'accuracy_optim' if USE_OPTIMAL_THRESHOLD else 'accuracy'
-    macro_avg_key = 'macro avg_optim' if USE_OPTIMAL_THRESHOLD else 'macro avg'
+    accuracy_key = 'accuracy_optim' if use_optim_threshold else 'accuracy'
+    macro_avg_key = 'macro avg_optim' if use_optim_threshold else 'macro avg'
     to_return = {
         'Model': model_name,
         'Balanced': balanced_cond,

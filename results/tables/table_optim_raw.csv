@@ -158,4 +158,4 @@ gnn,over,transductive,no,93.90,58.40,67.09,60.93,84.66
 all_gnn_ensemble_average,over,transductive,ensemble_average,96.38,60.50,57.49,58.70,72.08
 all_gnn_ensemble_majority,over,transductive,ensemble_majority,93.94,56.27,61.30,57.87,50.00
 all_gnn_ensemble_unanimity,over,transductive,ensemble_unanimity,87.33,53.68,65.50,54.06,50.00
-all_ensemble_average,-,-,-,97.03,70.48,68.42,69.39,92.12
+all_ensemble_average,-,-,-,97.09,71.01,67.92,69.33,92.27
