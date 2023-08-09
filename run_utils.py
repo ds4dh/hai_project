@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
 import matplotlib.pyplot as plt
+from tqdm import tqdm
 from sklearn.metrics import (
     auc,
     f1_score,
@@ -12,7 +13,11 @@ from sklearn.metrics import (
 )
 
 
-def generate_report(y_true, y_score, threshold=0.5):
+def generate_report(y_true: np.ndarray,
+                    y_score: np.ndarray,
+                    threshold: float=0.5,
+                    compute_auroc: bool=True,
+                    ) -> dict:
     """ Evaluate a trained model using some data
     """
     # Classification report
@@ -22,16 +27,19 @@ def generate_report(y_true, y_score, threshold=0.5):
     report['threshold'] = threshold
     
     # Auroc and confidence interval
-    auroc, auroc_low, auroc_high = auroc_ci(y_true, y_score)
-    report['auroc'] = auroc
-    report['auroc-low'] = auroc_low
-    report['auroc-high'] = auroc_high
+    if compute_auroc:
+        auroc, auroc_low, auroc_high = auroc_ci(y_true, y_score)
+        report['auroc'] = auroc
+        report['auroc-low'] = auroc_low
+        report['auroc-high'] = auroc_high
     
     # Return report
     return report
 
 
-def find_optimal_threshold(y_true, y_score):
+def find_optimal_threshold(y_true: np.ndarray,
+                           y_score: np.ndarray
+                           ) -> float:
     """ Find optimal decision threshold (using the validation set)
     """
     thresholds = np.linspace(0, 1, 100)
@@ -43,8 +51,8 @@ def find_optimal_threshold(y_true, y_score):
     return thresholds[np.argmax(scores)]
 
 
-def auroc_ci(y_true, y_score, t_value=1.96):
-    """ Compute confidence interval of auroc score using Racha's method
+def auroc_ci_old(y_true, y_score, t_value=1.96):
+    """ Compute confidence interval of auroc score using Racha's method (???)
     """
     auroc = roc_auc_score(y_true, y_score)
     n1 = sum(y_true == 1)
@@ -56,11 +64,36 @@ def auroc_ci(y_true, y_score, t_value=1.96):
     return (auroc, low, high)
 
 
-def plot_roc_curve(y_true, y_scores):
+def auroc_ci(y_true: np.ndarray,
+             y_score: np.ndarray,
+             alpha: float=0.05,
+             n_bootstraps: int=100
+             ) -> tuple[float, float, float]:
+    """ Compute confidence interval of auroc score using bootstraping
+    """
+    # Sample with replacement and compute auroc many times
+    aurocs = []
+    n_samples = len(y_true)
+    for _ in tqdm(range(n_bootstraps), desc='AUROC-CI boostrap', leave=False):
+        ids = np.random.choice(range(n_samples), size=n_samples, replace=True)
+        new_y_true = np.array(y_true)[ids]
+        new_y_score = np.array(y_score)[ids]
+        aurocs.append(roc_auc_score(new_y_true, new_y_score))
+    
+    # Compute and return center and low/high interval bounds for auroc
+    center = roc_auc_score(y_true, y_score)
+    low = np.percentile(aurocs, 100 * alpha / 2)
+    high = np.percentile(aurocs, 100 * (1 - alpha / 2))
+    return (center, low, high)
+
+
+def plot_roc_curve(y_true: np.ndarray,
+                   y_score: np.ndarray
+                   ) -> plt.Figure:
     """ Plot ROC curve for a set of prediction scores, given true labels
     """
     # Compute ROC curve and AUROC
-    fpr, tpr, _ = roc_curve(y_true, y_scores)
+    fpr, tpr, _ = roc_curve(y_true, y_score)
     roc_auc = auc(fpr, tpr)
     
     # Plot ROC curve
@@ -79,13 +112,20 @@ def plot_roc_curve(y_true, y_scores):
 
 
 class FocalLoss(nn.Module):
-    def __init__(self, alpha=0.25, gamma=2.0, weight=None):
+    def __init__(self,
+                 alpha: float=0.25,
+                 gamma: float=2.0,
+                 weight: float=None,
+                 ) -> None:
         super().__init__()
         self.alpha = alpha
         self.gamma = gamma
         self.weight = weight
 
-    def forward(self, inputs, targets):
+    def forward(self,
+                inputs: torch.Tensor,
+                targets: torch.Tensor
+                ) -> torch.Tensor:
         BCE_loss = F.binary_cross_entropy_with_logits(
             inputs, targets, weight=self.weight, reduction='none')
         exp_loss = torch.exp(-BCE_loss)  # prevents nans when probability 0

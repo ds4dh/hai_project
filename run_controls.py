@@ -66,12 +66,13 @@ GRIDS = {
 def main():
     """ Run all models for any set of conditions, keep results in a ckpt path
     """
-    # # First use node features only
-    # for balanced_cond in BALANCED_CONDS:
-    #     conds = {'feat_cond': 'nodes', 'balanced_cond': balanced_cond,
-    #              'setting_cond': None, 'link_cond': None}
-    #     for model_name in MODELS.keys():
-    #         run_one_model(conds, model_name)
+    # First use node features only
+    for balanced_cond in BALANCED_CONDS:
+        conds = {'feat_cond': 'nodes', 'balanced_cond': balanced_cond,
+                 'setting_cond': None, 'link_cond': None}
+        X, y = load_correct_data(conds)
+        for model_name in MODELS.keys():
+            run_one_model(conds, model_name, X, y)
                             
     # Second, use node and edge features (generated with node2vec)
     for setting_cond in SETTING_CONDS:
@@ -99,7 +100,7 @@ def run_one_model(conds: dict[str, str],
     # method produces similar performance levels for the control models.
     print(' - Running %s with conditions %s' % (name, conds))
     if DO_HYPER_OPTIM and conds['feat_cond'] != 'edges':
-        best_params = find_best_params(X, y, conds, name)
+        best_params = find_best_params(conds, name, X, y)
     else:
         best_params = load_best_params(conds, name)
         if best_params == None: return  # model that have not been run yet
@@ -117,10 +118,10 @@ def run_one_model(conds: dict[str, str],
     write_report(report, name, best_params, ckpt_dir)
 
 
-def find_best_params(X: np.ndarray,
-                     y: np.ndarray,
-                     conds: dict[str, str],
+def find_best_params(conds: dict[str, str],
                      name: str,
+                     X: np.ndarray,
+                     y: np.ndarray,
                      ) -> dict:
     """ Find best model hyper-parameters using random search
     """

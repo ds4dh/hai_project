@@ -178,9 +178,9 @@ def get_model_row(ckpt_dir: str,
         'Precision (%)': '%.2f' % (report[macro_avg_key]['precision'] * 100),
         'Recall (%)': '%.2f' % (report[macro_avg_key]['recall'] * 100),
         'F1-score (%)': '%.2f' % (report[macro_avg_key]['f1-score'] * 100),
-        'AUROC (%)': '%.2f' % (report['auroc'] * 100),
-        # 'AUROC (%) (95% CI)': '%.2f (%.2f-%.2f)' % tuple([report[k] * 100
-        #     for k in ['auroc', 'auroc-low', 'auroc-high']]),
+        # 'AUROC (%)': '%.2f' % (report['auroc'] * 100),
+        'AUROC (%) (95% CI)': '%.2f (%.2f-%.2f)' % tuple([report[k] * 100
+            for k in ['auroc', 'auroc-low', 'auroc-high']]),
     }
     return to_return
 
@@ -195,8 +195,8 @@ def write_spec_table(raw_table_path, table_path, cond_dicts):
     # Fill the dict list with the best model of each set of conditions
     for cond_dict in cond_dicts:
         to_select = lambda d, conds: all(d.get(k) == v for k, v in conds.items())
-        to_maximize = lambda d: d['AUROC (%)'].split(' ')[0]
-        # to_maximize = lambda d: d['AUROC (%) (95% CI)'].split(' ')[0]
+        # to_maximize = lambda d: d['AUROC (%)'].split(' ')[0]
+        to_maximize = lambda d: d['AUROC (%) (95% CI)'].split(' ')[0]
         selected_data = [d for d in raw_data if to_select(d, cond_dict)]
         max_auroc_dict = max(selected_data, key=to_maximize)
         dicts_to_write.append(max_auroc_dict)
