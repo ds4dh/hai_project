@@ -252,20 +252,19 @@ class PLWrapperNet(pl.LightningModule):
             y_true = y_true[batch.mask]
         y_true = y_true.cpu().numpy()
         
-        # Set parameters given whether test set is used or not
-        compute_auroc = False
+        # Compute optimized decision threshold if required
         if self.optimize_threshold and not test_mode:  # using validation data
             self.decision_threshold = find_optimal_threshold(y_true, y_score)
-            compute_auroc = True
         
         # Evaluate model with different decision threshold
         report = generate_report(
-            y_true, y_score, 0.5, compute_auroc=compute_auroc
+            y_true, y_score, 0.5,
+            compute_auroc_ci=test_mode
         )
         report_optim = generate_report(
             y_true, y_score,
             threshold=self.decision_threshold,
-            compute_auroc=compute_auroc,
+            compute_auroc_ci=test_mode,
         )
         report.update({'%s_optim' % k: v for k, v in report_optim.items()})
         

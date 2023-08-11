@@ -103,12 +103,12 @@ def compute_raw_results(raw_table_path, use_optim_threshold):
                     balanced_cond=balanced_cond)
                 dicts_to_write.append(model_row)
             except:
-                pass
+                pass  # for conditions that were not run yet
     
     # Second, check control models that use both node and edges features
     for setting_cond in ALL_SETTING_CONDS:
         for balanced_cond in ALL_BALANCED_CONDS:
-            for link_cond in ALL_LINK_CONDS:
+            for link_cond in [c for c in ALL_LINK_CONDS if c != 'no']:
                 ckpt_dir = os.path.join('models', 'controls', 'edge_features')
                 for model_name in ALL_CONTROL_MODELS:
                     try:
@@ -117,7 +117,7 @@ def compute_raw_results(raw_table_path, use_optim_threshold):
                             setting_cond=setting_cond, link_cond=link_cond)
                         dicts_to_write.append(model_row)
                     except:
-                        pass
+                        pass  # for conditions that were not run yet
                 
     # Third, check GNN networks
     model_name = 'gnn'
@@ -132,7 +132,7 @@ def compute_raw_results(raw_table_path, use_optim_threshold):
                         link_cond=link_cond)
                     dicts_to_write.append(model_row)
                 except:
-                    pass
+                    pass  # for conditions that were not run yet
     
     # Finally, check ensemble model (all)
     ckpt_dir = os.path.join('models', 'all')

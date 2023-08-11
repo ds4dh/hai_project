@@ -1,16 +1,16 @@
-Model,Balanced,Setting,Links,Accuracy (%),Precision (%),Recall (%),F1-score (%),AUROC (%)
-gnn,non,inductive,no,81.37,54.84,80.51,53.91,88.75
-gnn,non,inductive,wards,83.71,55.70,82.89,55.92,91.12
-gnn,non,transductive,wards,95.69,67.82,89.72,74.07,96.32
-catboost,non,-,-,97.68,87.19,58.33,63.18,90.61
-catboost,over,inductive,no,84.95,55.82,81.33,56.48,90.41
-catboost,non,transductive,wards,97.83,88.82,61.61,67.53,90.90
-random_forest,non,-,-,97.68,90.54,57.25,61.81,90.96
-random_forest,over,inductive,no,79.45,54.57,80.94,52.84,89.66
-random_forest,non,transductive,wards,97.71,92.76,57.43,62.17,89.77
-knn,under,-,-,80.15,54.71,81.10,53.28,90.14
-knn,under,inductive,no,80.43,54.53,79.45,53.14,88.37
-knn,under,transductive,no,80.36,54.50,79.35,53.08,88.42
-logistic_regression,non,-,-,82.37,54.77,78.66,54.16,87.91
-logistic_regression,non,inductive,caregivers,89.20,56.68,76.59,58.86,88.09
-logistic_regression,non,transductive,wards,80.78,54.61,79.63,53.38,88.66
+Model,Balanced,Setting,Links,Accuracy (%),Precision (%),Recall (%),F1-score (%),AUROC (%) (95% CI)
+gnn,non,inductive,no,82.47,55.17,81.24,54.74,88.66 (87.98-89.43)
+gnn,non,inductive,wards,82.74,55.46,82.86,55.24,91.23 (90.61-91.85)
+gnn,non,transductive,wards,96.18,69.22,88.58,75.27,96.13 (95.63-96.60)
+catboost,non,-,-,97.68,87.19,58.33,63.18,90.55 (89.94-91.27)
+catboost,under,inductive,caregivers,74.89,53.84,79.58,50.15,88.64 (88.04-89.46)
+catboost,non,transductive,wards,97.83,88.82,61.61,67.53,90.94 (90.24-91.69)
+random_forest,non,-,-,97.68,90.07,57.42,62.04,90.97 (90.27-91.59)
+random_forest,over,inductive,caregivers,84.57,55.14,77.73,55.41,86.99 (86.22-87.79)
+random_forest,non,transductive,wards,97.70,93.13,57.19,61.83,89.78 (89.32-90.44)
+knn,under,-,-,80.15,54.71,81.10,53.28,90.14 (89.35-90.83)
+knn,under,inductive,wards,86.23,55.54,77.16,56.48,87.66 (86.93-88.52)
+knn,under,transductive,wards,72.46,53.33,76.91,48.55,86.43 (85.57-87.22)
+logistic_regression,non,-,-,82.37,54.78,78.66,54.17,87.92 (87.17-88.70)
+logistic_regression,non,inductive,caregivers,89.19,56.69,76.66,58.88,88.11 (87.41-88.96)
+logistic_regression,non,transductive,wards,80.77,54.61,79.63,53.38,88.59 (87.93-89.32)

@@ -1,161 +1,137 @@
-Model,Balanced,Setting,Links,Accuracy (%),Precision (%),Recall (%),F1-score (%),AUROC (%)
-logistic_regression,under,-,-,81.92,54.67,78.56,53.87,87.84
-random_forest,under,-,-,77.74,54.42,81.61,51.99,90.70
-catboost,under,-,-,77.77,54.43,81.70,52.02,90.02
-knn,under,-,-,80.15,54.71,81.10,53.28,90.14
-all_ensemble_average,under,-,-,79.91,54.80,82.09,53.31,90.83
-all_ensemble_majority,under,-,-,82.13,55.23,82.21,54.71,82.21
-all_ensemble_unanimity,under,-,-,71.41,53.71,80.89,48.58,80.89
-logistic_regression,non,-,-,82.37,54.77,78.66,54.16,87.91
-random_forest,non,-,-,97.68,90.54,57.25,61.81,90.96
-catboost,non,-,-,97.68,87.19,58.33,63.18,90.61
-knn,non,-,-,97.42,79.02,52.25,53.60,83.77
-all_ensemble_average,non,-,-,97.59,79.98,60.27,65.01,90.14
-all_ensemble_majority,non,-,-,97.68,90.88,57.08,61.58,57.08
-all_ensemble_unanimity,non,-,-,82.37,54.79,78.72,54.18,78.72
-logistic_regression,over,-,-,81.78,54.65,78.62,53.79,87.82
-random_forest,over,-,-,87.57,56.46,79.54,58.17,90.40
-catboost,over,-,-,85.80,56.04,81.06,57.08,90.48
-knn,over,-,-,82.72,54.78,78.16,54.29,83.75
-all_ensemble_average,over,-,-,86.77,56.34,80.78,57.79,90.73
-all_ensemble_majority,over,-,-,88.70,57.04,79.85,59.29,79.85
-all_ensemble_unanimity,over,-,-,72.77,53.84,81.12,49.29,81.12
-logistic_regression,under,inductive,all,82.21,54.48,76.89,53.71,86.98
-random_forest,under,inductive,all,60.25,52.47,73.51,42.42,85.61
-catboost,under,inductive,all,73.42,53.70,79.50,49.39,88.40
-knn,under,inductive,all,88.16,55.91,75.18,57.52,87.12
-logistic_regression,under,inductive,wards,81.49,54.56,78.34,53.56,87.70
-random_forest,under,inductive,wards,74.16,53.43,76.67,49.34,84.28
-catboost,under,inductive,wards,75.76,53.84,78.84,50.48,87.87
-knn,under,inductive,wards,86.23,55.54,77.16,56.48,87.66
-logistic_regression,under,inductive,caregivers,79.65,54.21,77.97,52.43,87.38
-random_forest,under,inductive,caregivers,63.60,52.81,76.01,44.24,86.72
-catboost,under,inductive,caregivers,74.89,53.84,79.58,50.15,88.67
-knn,under,inductive,caregivers,82.70,54.75,78.02,54.24,87.54
-logistic_regression,under,inductive,no,81.92,54.67,78.56,53.87,87.84
-random_forest,under,inductive,no,76.91,54.08,79.77,51.23,88.55
-catboost,under,inductive,no,77.13,54.13,79.95,51.38,88.78
-knn,under,inductive,no,80.43,54.53,79.45,53.14,88.37
-logistic_regression,non,inductive,all,95.07,61.30,68.84,63.97,87.50
-random_forest,non,inductive,all,97.37,48.69,50.00,49.33,85.38
-catboost,non,inductive,all,97.37,48.69,50.00,49.33,87.76
-knn,non,inductive,all,97.41,81.80,51.47,52.20,74.56
-logistic_regression,non,inductive,wards,92.99,58.69,72.16,61.83,87.47
-random_forest,non,inductive,wards,97.37,48.69,50.00,49.33,84.95
-catboost,non,inductive,wards,97.38,98.69,50.10,49.54,87.65
-knn,non,inductive,wards,97.41,77.80,52.69,54.35,78.43
-logistic_regression,non,inductive,caregivers,89.20,56.68,76.59,58.86,88.09
-random_forest,non,inductive,caregivers,97.37,48.69,50.00,49.33,85.25
-catboost,non,inductive,caregivers,97.37,48.69,50.00,49.33,87.81
-knn,non,inductive,caregivers,97.39,79.39,50.92,51.16,76.64
-logistic_regression,non,inductive,no,82.41,54.76,78.51,54.16,87.92
-random_forest,non,inductive,no,97.37,48.69,50.00,49.33,88.36
-catboost,non,inductive,no,97.46,84.67,52.54,54.15,89.04
-knn,non,inductive,no,97.42,79.20,52.28,53.66,83.80
-logistic_regression,over,inductive,all,88.28,56.28,76.83,58.07,87.84
-random_forest,over,inductive,all,82.87,54.73,77.67,54.28,86.32
-catboost,over,inductive,all,94.19,54.96,57.82,55.96,81.58
-knn,over,inductive,all,84.75,55.10,77.11,55.40,86.19
-logistic_regression,over,inductive,wards,89.06,56.56,76.32,58.65,87.30
-random_forest,over,inductive,wards,79.30,53.97,76.58,51.98,85.49
-catboost,over,inductive,wards,79.74,54.22,77.98,52.48,88.32
-knn,over,inductive,wards,85.57,55.32,77.06,55.96,85.90
-logistic_regression,over,inductive,caregivers,91.16,57.56,74.80,60.39,87.51
-random_forest,over,inductive,caregivers,84.56,55.13,77.62,55.39,87.13
-catboost,over,inductive,caregivers,92.96,56.19,64.01,58.15,83.52
-knn,over,inductive,caregivers,79.47,54.22,78.25,52.37,85.50
-logistic_regression,over,inductive,no,81.77,54.65,78.62,53.79,87.82
-random_forest,over,inductive,no,79.45,54.57,80.94,52.84,89.66
-catboost,over,inductive,no,84.95,55.82,81.33,56.48,90.41
-knn,over,inductive,no,81.83,54.62,78.31,53.76,85.23
-logistic_regression,under,transductive,all,78.99,54.07,77.63,52.00,87.13
-random_forest,under,transductive,all,75.43,53.80,78.74,50.30,88.37
-catboost,under,transductive,all,77.49,54.21,80.20,51.62,89.69
-knn,under,transductive,all,68.29,52.98,75.95,46.44,85.21
-logistic_regression,under,transductive,wards,82.58,54.86,78.97,54.36,88.05
-random_forest,under,transductive,wards,73.83,53.42,76.84,49.21,87.44
-catboost,under,transductive,wards,74.22,53.70,78.86,49.70,88.76
-knn,under,transductive,wards,72.46,53.33,76.91,48.55,86.49
-logistic_regression,under,transductive,caregivers,80.48,54.31,77.82,52.87,87.26
-random_forest,under,transductive,caregivers,76.26,53.95,79.33,50.82,88.92
-catboost,under,transductive,caregivers,77.44,54.29,80.89,51.70,90.03
-knn,under,transductive,caregivers,76.99,53.69,76.57,50.75,86.03
-logistic_regression,under,transductive,no,81.92,54.67,78.56,53.87,87.84
-random_forest,under,transductive,no,76.99,54.07,79.61,51.25,88.55
-catboost,under,transductive,no,77.25,54.13,79.81,51.43,88.85
-knn,under,transductive,no,80.36,54.50,79.35,53.08,88.42
-logistic_regression,non,transductive,all,80.39,54.57,79.77,53.18,88.48
-random_forest,non,transductive,all,97.66,93.18,56.22,60.35,89.49
-catboost,non,transductive,all,97.81,90.12,60.45,66.19,90.69
-knn,non,transductive,all,97.44,83.40,52.40,53.89,81.19
-logistic_regression,non,transductive,wards,80.78,54.61,79.63,53.38,88.66
-random_forest,non,transductive,wards,97.71,92.76,57.43,62.17,89.77
-catboost,non,transductive,wards,97.83,88.82,61.61,67.53,90.90
-knn,non,transductive,wards,97.37,73.41,53.41,55.47,82.55
-logistic_regression,non,transductive,caregivers,82.33,54.89,79.51,54.31,88.23
-random_forest,non,transductive,caregivers,97.68,93.07,56.60,60.94,89.49
-catboost,non,transductive,caregivers,97.77,89.43,59.69,65.15,90.35
-knn,non,transductive,caregivers,97.39,75.79,52.24,53.56,81.03
-logistic_regression,non,transductive,no,82.40,54.76,78.51,54.16,87.92
-random_forest,non,transductive,no,97.38,98.69,50.10,49.54,88.55
-catboost,non,transductive,no,97.44,82.39,52.47,54.00,89.33
-knn,non,transductive,no,97.41,78.47,52.25,53.60,83.77
-logistic_regression,over,transductive,all,82.46,54.72,78.13,54.11,87.44
-random_forest,over,transductive,all,77.40,54.06,79.18,51.40,88.12
-catboost,over,transductive,all,77.46,54.25,80.59,51.66,89.00
-knn,over,transductive,all,59.47,51.16,60.99,40.78,64.86
-logistic_regression,over,transductive,wards,81.53,54.57,78.33,53.59,87.33
-random_forest,over,transductive,wards,59.61,52.73,76.15,42.37,86.63
-catboost,over,transductive,wards,68.01,53.26,78.68,46.64,87.89
-knn,over,transductive,wards,67.28,52.39,70.98,45.35,73.29
-logistic_regression,over,transductive,caregivers,82.31,54.71,78.26,54.05,87.58
-random_forest,over,transductive,caregivers,74.13,53.59,78.00,49.52,87.23
-catboost,over,transductive,caregivers,74.99,53.85,79.56,50.19,87.96
-knn,over,transductive,caregivers,58.85,51.38,63.17,40.73,68.33
-logistic_regression,over,transductive,no,81.77,54.65,78.62,53.79,87.82
-random_forest,over,transductive,no,79.40,54.54,80.78,52.78,89.66
-catboost,over,transductive,no,84.92,55.82,81.39,56.48,90.50
-knn,over,transductive,no,81.92,54.68,78.63,53.89,85.27
-gnn,under,inductive,all,20.49,51.59,59.11,18.60,83.17
-gnn,under,inductive,wards,20.21,51.58,58.96,18.38,84.03
-gnn,under,inductive,caregivers,10.89,51.43,54.24,10.60,82.15
-gnn,under,inductive,no,26.49,51.69,62.01,23.01,83.32
-all_gnn_ensemble_average,under,inductive,ensemble_average,17.82,51.54,57.77,16.50,83.86
-all_gnn_ensemble_majority,under,inductive,ensemble_majority,19.17,51.57,58.46,17.57,58.46
-all_gnn_ensemble_unanimity,under,inductive,ensemble_unanimity,11.90,51.45,54.76,11.51,54.76
-gnn,non,inductive,all,84.57,55.63,80.87,56.10,89.53
-gnn,non,inductive,wards,83.71,55.70,82.89,55.92,91.12
-gnn,non,inductive,caregivers,84.84,55.39,78.78,55.84,87.60
-gnn,non,inductive,no,81.37,54.84,80.51,53.91,88.75
-all_gnn_ensemble_average,non,inductive,ensemble_average,84.76,55.88,82.08,56.51,90.64
-all_gnn_ensemble_majority,non,inductive,ensemble_majority,84.60,55.81,81.97,56.37,81.97
-all_gnn_ensemble_unanimity,non,inductive,ensemble_unanimity,77.83,54.51,82.27,52.14,82.27
-gnn,over,inductive,all,8.32,51.38,52.89,8.23,80.34
-gnn,over,inductive,wards,68.33,53.32,79.01,46.83,87.50
-gnn,over,inductive,caregivers,33.97,51.84,65.52,28.00,83.48
-gnn,over,inductive,no,48.34,52.36,72.86,36.52,83.81
-all_gnn_ensemble_average,over,inductive,ensemble_average,33.84,51.86,65.59,27.93,87.70
-all_gnn_ensemble_majority,over,inductive,ensemble_majority,33.00,51.83,65.16,27.39,65.16
-all_gnn_ensemble_unanimity,over,inductive,ensemble_unanimity,6.98,51.37,52.24,6.95,52.24
-gnn,under,transductive,all,24.47,51.63,60.88,21.56,82.57
-gnn,under,transductive,wards,31.86,51.79,64.50,26.64,83.42
-gnn,under,transductive,caregivers,13.31,51.47,55.49,12.74,80.76
-gnn,under,transductive,no,11.00,51.43,54.30,10.70,83.70
-all_gnn_ensemble_average,under,transductive,ensemble_average,28.24,51.75,63.02,24.23,86.82
-all_gnn_ensemble_majority,under,transductive,ensemble_majority,26.22,51.69,61.91,22.82,61.91
-all_gnn_ensemble_unanimity,under,transductive,ensemble_unanimity,21.51,51.61,59.63,19.38,59.63
-gnn,non,transductive,all,90.95,59.81,86.84,63.76,94.03
-gnn,non,transductive,wards,95.69,67.82,89.72,74.07,96.32
-gnn,non,transductive,caregivers,83.65,55.56,82.02,55.70,89.32
-gnn,non,transductive,no,82.09,55.02,80.74,54.41,89.08
-all_gnn_ensemble_average,non,transductive,ensemble_average,92.61,61.64,87.60,66.49,95.11
-all_gnn_ensemble_majority,non,transductive,ensemble_majority,92.47,61.48,87.59,66.26,87.59
-all_gnn_ensemble_unanimity,non,transductive,ensemble_unanimity,82.16,55.93,87.23,55.68,87.23
-gnn,over,transductive,all,2.63,1.31,50.00,2.56,75.12
-gnn,over,transductive,wards,2.63,1.31,50.00,2.56,73.96
-gnn,over,transductive,caregivers,2.63,1.31,50.00,2.56,70.01
-gnn,over,transductive,no,33.16,51.83,65.17,27.49,84.66
-all_gnn_ensemble_average,over,transductive,ensemble_average,2.63,1.31,50.00,2.56,72.08
-all_gnn_ensemble_majority,over,transductive,ensemble_majority,2.63,1.31,50.00,2.56,50.00
-all_gnn_ensemble_unanimity,over,transductive,ensemble_unanimity,2.63,1.31,50.00,2.56,50.00
-all_ensemble_average,-,-,-,97.42,74.80,65.18,68.74,92.27
+Model,Balanced,Setting,Links,Accuracy (%),Precision (%),Recall (%),F1-score (%),AUROC (%) (95% CI)
+logistic_regression,under,-,-,81.92,54.67,78.56,53.87,87.85 (86.95-88.58)
+random_forest,under,-,-,77.79,54.45,81.84,52.05,90.76 (90.11-91.44)
+catboost,under,-,-,77.77,54.43,81.70,52.02,90.08 (89.31-90.70)
+knn,under,-,-,80.15,54.71,81.10,53.28,90.14 (89.35-90.83)
+all_ensemble_average,under,-,-,79.91,54.80,82.09,53.31,90.83 (89.80-91.86)
+all_ensemble_majority,under,-,-,82.13,55.23,82.21,54.71,82.21 (80.88-83.55)
+all_ensemble_unanimity,under,-,-,71.41,53.71,80.89,48.58,80.89 (79.53-82.26)
+logistic_regression,non,-,-,82.37,54.78,78.66,54.17,87.92 (87.17-88.70)
+random_forest,non,-,-,97.68,90.07,57.42,62.04,90.97 (90.27-91.59)
+catboost,non,-,-,97.68,87.19,58.33,63.18,90.55 (89.94-91.27)
+knn,non,-,-,97.42,79.02,52.25,53.60,83.78 (82.77-84.87)
+all_ensemble_average,non,-,-,97.59,79.98,60.27,65.01,90.14 (89.08-91.20)
+all_ensemble_majority,non,-,-,97.68,90.88,57.08,61.58,57.08 (55.52-58.63)
+all_ensemble_unanimity,non,-,-,82.37,54.79,78.72,54.18,78.72 (77.31-80.13)
+logistic_regression,over,-,-,81.77,54.65,78.62,53.79,87.84 (87.00-88.62)
+random_forest,over,-,-,87.70,56.48,79.37,58.23,90.46 (89.86-91.07)
+catboost,over,-,-,85.80,56.04,81.06,57.08,90.35 (89.68-91.07)
+knn,over,-,-,82.72,54.78,78.16,54.29,83.78 (82.51-85.10)
+all_ensemble_average,over,-,-,86.77,56.34,80.78,57.79,90.73 (89.70-91.77)
+all_ensemble_majority,over,-,-,88.70,57.04,79.85,59.29,79.85 (78.46-81.24)
+all_ensemble_unanimity,over,-,-,72.77,53.84,81.12,49.29,81.12 (79.76-82.48)
+logistic_regression,under,inductive,all,82.21,54.48,76.89,53.71,87.02 (86.27-87.89)
+random_forest,under,inductive,all,60.75,52.48,73.53,42.65,85.58 (84.84-86.29)
+catboost,under,inductive,all,73.42,53.70,79.50,49.39,88.45 (87.74-89.08)
+knn,under,inductive,all,88.16,55.91,75.18,57.52,87.12 (86.25-87.89)
+logistic_regression,under,inductive,wards,81.49,54.56,78.34,53.56,87.70 (87.04-88.44)
+random_forest,under,inductive,wards,74.10,53.47,77.01,49.37,84.20 (83.42-84.88)
+catboost,under,inductive,wards,75.76,53.84,78.84,50.48,87.87 (87.15-88.64)
+knn,under,inductive,wards,86.23,55.54,77.16,56.48,87.66 (86.93-88.52)
+logistic_regression,under,inductive,caregivers,79.65,54.21,77.97,52.43,87.31 (86.56-88.00)
+random_forest,under,inductive,caregivers,64.28,52.89,76.56,44.62,86.79 (86.02-87.57)
+catboost,under,inductive,caregivers,74.89,53.84,79.58,50.15,88.64 (88.04-89.46)
+knn,under,inductive,caregivers,82.70,54.75,78.02,54.24,87.53 (86.73-88.26)
+logistic_regression,non,inductive,all,95.07,61.28,68.80,63.94,87.45 (86.64-88.20)
+random_forest,non,inductive,all,97.37,48.69,50.00,49.33,85.38 (84.58-86.22)
+catboost,non,inductive,all,97.37,48.69,50.00,49.33,87.75 (86.95-88.48)
+knn,non,inductive,all,97.41,81.80,51.47,52.20,74.43 (72.73-75.90)
+logistic_regression,non,inductive,wards,93.00,58.69,72.16,61.83,87.45 (86.59-88.27)
+random_forest,non,inductive,wards,97.37,48.69,50.00,49.33,84.97 (84.14-85.88)
+catboost,non,inductive,wards,97.38,98.69,50.10,49.54,87.60 (86.79-88.28)
+knn,non,inductive,wards,97.41,77.80,52.69,54.35,78.46 (77.24-79.39)
+logistic_regression,non,inductive,caregivers,89.19,56.69,76.66,58.88,88.11 (87.41-88.96)
+random_forest,non,inductive,caregivers,97.37,48.69,50.00,49.33,85.21 (84.34-86.04)
+catboost,non,inductive,caregivers,97.37,48.69,50.00,49.33,87.80 (87.07-88.55)
+knn,non,inductive,caregivers,97.39,79.39,50.92,51.16,76.60 (75.53-77.95)
+logistic_regression,over,inductive,all,88.28,56.27,76.80,58.07,87.82 (87.06-88.67)
+random_forest,over,inductive,all,82.73,54.74,77.90,54.24,86.34 (85.74-87.12)
+catboost,over,inductive,all,94.19,54.96,57.82,55.96,81.62 (80.91-82.33)
+knn,over,inductive,all,84.75,55.10,77.11,55.40,86.16 (85.23-87.11)
+logistic_regression,over,inductive,wards,89.06,56.56,76.32,58.65,87.40 (86.44-88.20)
+random_forest,over,inductive,wards,79.14,53.95,76.59,51.89,85.57 (84.85-86.38)
+catboost,over,inductive,wards,79.74,54.22,77.98,52.48,88.36 (87.68-89.05)
+knn,over,inductive,wards,85.57,55.32,77.06,55.96,85.85 (84.94-86.84)
+logistic_regression,over,inductive,caregivers,91.16,57.57,74.83,60.40,87.50 (86.67-88.34)
+random_forest,over,inductive,caregivers,84.57,55.14,77.73,55.41,86.99 (86.22-87.79)
+catboost,over,inductive,caregivers,92.96,56.19,64.01,58.15,83.49 (82.63-84.39)
+knn,over,inductive,caregivers,79.47,54.22,78.25,52.37,85.51 (84.59-86.38)
+logistic_regression,under,transductive,all,78.99,54.07,77.63,52.00,87.12 (86.26-87.88)
+random_forest,under,transductive,all,75.51,53.82,78.85,50.35,88.48 (87.67-89.31)
+catboost,under,transductive,all,77.49,54.21,80.20,51.62,89.72 (89.12-90.30)
+knn,under,transductive,all,68.29,52.98,75.95,46.44,85.25 (84.30-85.99)
+logistic_regression,under,transductive,wards,82.58,54.86,78.97,54.36,88.08 (87.45-88.77)
+random_forest,under,transductive,wards,73.98,53.41,76.65,49.25,87.40 (86.58-88.17)
+catboost,under,transductive,wards,74.22,53.70,78.86,49.70,88.69 (88.10-89.33)
+knn,under,transductive,wards,72.46,53.33,76.91,48.55,86.43 (85.57-87.22)
+logistic_regression,under,transductive,caregivers,80.48,54.31,77.82,52.87,87.28 (86.50-88.13)
+random_forest,under,transductive,caregivers,76.23,53.97,79.49,50.83,88.93 (88.19-89.60)
+catboost,under,transductive,caregivers,77.44,54.29,80.89,51.70,90.06 (89.47-90.63)
+knn,under,transductive,caregivers,76.99,53.69,76.57,50.75,86.05 (85.11-86.87)
+logistic_regression,non,transductive,all,80.38,54.57,79.77,53.18,88.41 (87.69-89.17)
+random_forest,non,transductive,all,97.66,93.43,56.26,60.42,89.46 (88.72-90.15)
+catboost,non,transductive,all,97.81,90.12,60.45,66.19,90.70 (90.13-91.31)
+knn,non,transductive,all,97.44,83.40,52.40,53.89,81.23 (79.88-82.37)
+logistic_regression,non,transductive,wards,80.77,54.61,79.63,53.38,88.59 (87.93-89.32)
+random_forest,non,transductive,wards,97.70,93.13,57.19,61.83,89.78 (89.32-90.44)
+catboost,non,transductive,wards,97.83,88.82,61.61,67.53,90.94 (90.24-91.69)
+knn,non,transductive,wards,97.37,73.41,53.41,55.47,82.55 (81.23-83.88)
+logistic_regression,non,transductive,caregivers,82.33,54.89,79.51,54.31,88.23 (87.09-89.38)
+random_forest,non,transductive,caregivers,97.68,93.07,56.60,60.94,89.49 (88.40-90.58)
+catboost,non,transductive,caregivers,97.77,89.43,59.69,65.15,90.35 (89.29-91.40)
+knn,non,transductive,caregivers,97.39,75.79,52.24,53.56,81.03 (79.67-82.39)
+logistic_regression,over,transductive,all,82.46,54.72,78.13,54.11,87.44 (86.26-88.61)
+random_forest,over,transductive,all,77.40,54.06,79.18,51.40,88.12 (86.97-89.26)
+catboost,over,transductive,all,77.46,54.25,80.59,51.66,89.00 (87.89-90.11)
+knn,over,transductive,all,59.47,51.16,60.99,40.78,64.86 (63.30-66.42)
+logistic_regression,over,transductive,wards,81.53,54.57,78.33,53.59,87.33 (86.15-88.50)
+random_forest,over,transductive,wards,59.61,52.73,76.15,42.37,86.63 (85.43-87.83)
+catboost,over,transductive,wards,68.01,53.26,78.68,46.64,87.89 (86.74-89.05)
+knn,over,transductive,wards,67.28,52.39,70.98,45.35,73.29 (71.80-74.79)
+logistic_regression,over,transductive,caregivers,82.31,54.71,78.26,54.05,87.58 (86.41-88.75)
+random_forest,over,transductive,caregivers,74.13,53.59,78.00,49.52,87.23 (86.05-88.41)
+catboost,over,transductive,caregivers,74.99,53.85,79.56,50.19,87.96 (86.81-89.11)
+knn,over,transductive,caregivers,58.85,51.38,63.17,40.73,68.33 (66.79-69.87)
+gnn,under,inductive,all,17.95,51.54,57.83,16.60,83.42 (82.59-84.31)
+gnn,under,inductive,wards,25.98,51.69,61.82,22.65,84.43 (83.61-85.30)
+gnn,under,inductive,caregivers,10.48,51.43,54.03,10.24,82.40 (81.29-83.45)
+gnn,under,inductive,no,45.73,52.23,71.42,35.05,83.21 (82.69-83.76)
+all_gnn_ensemble_average,under,inductive,ensemble_average,17.82,51.54,57.77,16.50,83.86 (82.57-85.15)
+all_gnn_ensemble_majority,under,inductive,ensemble_majority,19.17,51.57,58.46,17.57,58.46 (56.90-60.02)
+all_gnn_ensemble_unanimity,under,inductive,ensemble_unanimity,11.90,51.45,54.76,11.51,54.76 (53.22-56.31)
+gnn,non,inductive,all,84.23,55.61,81.30,55.95,89.67 (88.87-90.35)
+gnn,non,inductive,wards,82.74,55.46,82.86,55.24,91.23 (90.61-91.85)
+gnn,non,inductive,caregivers,84.89,55.34,78.40,55.79,87.90 (87.14-88.67)
+gnn,non,inductive,no,82.47,55.17,81.24,54.74,88.66 (87.98-89.43)
+all_gnn_ensemble_average,non,inductive,ensemble_average,84.76,55.88,82.08,56.51,90.64 (89.60-91.68)
+all_gnn_ensemble_majority,non,inductive,ensemble_majority,84.60,55.81,81.97,56.37,81.97 (80.63-83.30)
+all_gnn_ensemble_unanimity,non,inductive,ensemble_unanimity,77.83,54.51,82.27,52.14,82.27 (80.94-83.60)
+gnn,over,inductive,all,11.35,51.43,54.45,11.02,81.19 (80.40-82.27)
+gnn,over,inductive,wards,68.27,53.30,78.92,46.79,87.56 (86.72-88.23)
+gnn,over,inductive,caregivers,31.40,51.78,64.30,26.34,83.22 (82.47-84.11)
+gnn,over,inductive,no,35.12,51.89,66.21,28.74,83.12 (82.35-83.91)
+all_gnn_ensemble_average,over,inductive,ensemble_average,33.84,51.86,65.59,27.93,87.70 (86.53-88.86)
+all_gnn_ensemble_majority,over,inductive,ensemble_majority,33.00,51.83,65.16,27.39,65.16 (63.60-66.72)
+all_gnn_ensemble_unanimity,over,inductive,ensemble_unanimity,6.98,51.37,52.24,6.95,52.24 (50.71-53.77)
+gnn,under,transductive,all,27.65,51.70,62.51,23.82,82.76 (81.72-83.62)
+gnn,under,transductive,wards,49.15,52.32,72.57,36.92,85.70 (85.03-86.25)
+gnn,under,transductive,caregivers,23.22,51.63,60.41,20.65,82.29 (81.27-83.27)
+gnn,under,transductive,no,18.85,51.55,58.23,17.32,83.57 (82.67-84.56)
+all_gnn_ensemble_average,under,transductive,ensemble_average,28.24,51.75,63.02,24.23,86.82 (85.63-88.02)
+all_gnn_ensemble_majority,under,transductive,ensemble_majority,26.22,51.69,61.91,22.82,61.91 (60.35-63.48)
+all_gnn_ensemble_unanimity,under,transductive,ensemble_unanimity,21.51,51.61,59.63,19.38,59.63 (58.06-61.19)
+gnn,non,transductive,all,92.36,61.16,86.59,65.79,94.07 (93.59-94.60)
+gnn,non,transductive,wards,96.18,69.22,88.58,75.27,96.13 (95.63-96.60)
+gnn,non,transductive,caregivers,83.55,55.49,81.73,55.56,89.36 (88.62-89.98)
+gnn,non,transductive,no,82.14,55.04,80.84,54.46,88.79 (88.09-89.50)
+all_gnn_ensemble_average,non,transductive,ensemble_average,92.61,61.64,87.60,66.49,95.11 (94.33-95.89)
+all_gnn_ensemble_majority,non,transductive,ensemble_majority,92.47,61.48,87.59,66.26,87.59 (86.43-88.76)
+all_gnn_ensemble_unanimity,non,transductive,ensemble_unanimity,82.16,55.93,87.23,55.68,87.23 (86.05-88.41)
+gnn,over,transductive,all,2.63,1.31,50.00,2.56,73.12 (71.87-74.48)
+gnn,over,transductive,wards,2.63,1.31,50.00,2.56,71.36 (69.76-72.89)
+gnn,over,transductive,caregivers,2.63,1.31,50.00,2.56,69.58 (68.42-70.75)
+gnn,over,transductive,no,24.98,51.66,61.28,21.93,84.31 (83.16-84.98)
+all_gnn_ensemble_average,over,transductive,ensemble_average,2.63,1.31,50.00,2.56,72.08 (70.57-73.59)
+all_gnn_ensemble_majority,over,transductive,ensemble_majority,2.63,1.31,50.00,2.56,50.00 (48.49-51.51)
+all_gnn_ensemble_unanimity,over,transductive,ensemble_unanimity,2.63,1.31,50.00,2.56,50.00 (48.49-51.51)
+all_ensemble_average,-,-,-,97.43,74.98,65.19,68.80,92.17 (91.68-92.72)

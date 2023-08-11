@@ -16,7 +16,7 @@ from sklearn.metrics import (
 def generate_report(y_true: np.ndarray,
                     y_score: np.ndarray,
                     threshold: float=0.5,
-                    compute_auroc: bool=True,
+                    compute_auroc_ci: bool=True,
                     ) -> dict:
     """ Evaluate a trained model using some data
     """
@@ -26,12 +26,14 @@ def generate_report(y_true: np.ndarray,
         y_true, y_pred, zero_division=0, output_dict=True)
     report['threshold'] = threshold
     
-    # Auroc and confidence interval
-    if compute_auroc:
-        auroc, auroc_low, auroc_high = auroc_ci(y_true, y_score)
-        report['auroc'] = auroc
+    # Compute AUROC and confidence interval
+    if compute_auroc_ci:
+        auroc_mean, auroc_low, auroc_high = auroc_ci(y_true, y_score)
+        report['auroc'] = auroc_mean
         report['auroc-low'] = auroc_low
         report['auroc-high'] = auroc_high
+    else:
+        report['auroc'] = roc_auc_score(y_true, y_score)
     
     # Return report
     return report
@@ -51,17 +53,17 @@ def find_optimal_threshold(y_true: np.ndarray,
     return thresholds[np.argmax(scores)]
 
 
-def auroc_ci_old(y_true, y_score, t_value=1.96):
-    """ Compute confidence interval of auroc score using Racha's method (???)
-    """
-    auroc = roc_auc_score(y_true, y_score)
-    n1 = sum(y_true == 1)
-    n2 = sum(y_true == 0)
-    p1 = (n1 - 1) * (auroc / (2 - auroc) - auroc ** 2)
-    p2 = (n2 - 1) * (2 * auroc ** 2 / (1 + auroc) - auroc ** 2)
-    std_auroc = ((auroc * (1 - auroc) + p1 + p2) / (n1 * n2)) ** 0.5
-    low, high = (auroc - t_value * std_auroc, auroc + t_value * std_auroc)
-    return (auroc, low, high)
+# def auroc_ci_old(y_true, y_score, t_value=1.96):
+#     """ Compute confidence interval of auroc score using Racha's method (???)
+#     """
+#     auroc = roc_auc_score(y_true, y_score)
+#     n1 = sum(y_true == 1)
+#     n2 = sum(y_true == 0)
+#     p1 = (n1 - 1) * (auroc / (2 - auroc) - auroc ** 2)
+#     p2 = (n2 - 1) * (2 * auroc ** 2 / (1 + auroc) - auroc ** 2)
+#     std_auroc = ((auroc * (1 - auroc) + p1 + p2) / (n1 * n2)) ** 0.5
+#     low, high = (auroc - t_value * std_auroc, auroc + t_value * std_auroc)
+#     return (auroc, low, high)
 
 
 def auroc_ci(y_true: np.ndarray,
@@ -80,11 +82,11 @@ def auroc_ci(y_true: np.ndarray,
         new_y_score = np.array(y_score)[ids]
         aurocs.append(roc_auc_score(new_y_true, new_y_score))
     
-    # Compute and return center and low/high interval bounds for auroc
-    center = roc_auc_score(y_true, y_score)
+    # Compute and return interval bounds for auroc
+    mean = np.mean(aurocs)
     low = np.percentile(aurocs, 100 * alpha / 2)
     high = np.percentile(aurocs, 100 * (1 - alpha / 2))
-    return (center, low, high)
+    return mean, low, high
 
 
 def plot_roc_curve(y_true: np.ndarray,

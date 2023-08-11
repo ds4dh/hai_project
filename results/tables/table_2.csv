@@ -1,12 +1,12 @@
-Model,Balanced,Setting,Links,Accuracy (%),Precision (%),Recall (%),F1-score (%),AUROC (%)
-gnn,non,transductive,all,90.95,59.81,86.84,63.76,94.03
-gnn,non,transductive,wards,95.69,67.82,89.72,74.07,96.32
-gnn,non,transductive,caregivers,83.65,55.56,82.02,55.70,89.32
-gnn,non,inductive,all,84.57,55.63,80.87,56.10,89.53
-gnn,non,inductive,wards,83.71,55.70,82.89,55.92,91.12
-gnn,non,inductive,caregivers,84.84,55.39,78.78,55.84,87.60
-catboost,non,-,-,97.68,87.19,58.33,63.18,90.61
-random_forest,non,-,-,97.68,90.54,57.25,61.81,90.96
-knn,under,-,-,80.15,54.71,81.10,53.28,90.14
-logistic_regression,non,-,-,82.37,54.77,78.66,54.16,87.91
-all_ensemble_average,-,-,-,97.42,74.80,65.18,68.74,92.27
+Model,Balanced,Setting,Links,Accuracy (%),Precision (%),Recall (%),F1-score (%),AUROC (%) (95% CI)
+gnn,non,transductive,all,92.36,61.16,86.59,65.79,94.07 (93.59-94.60)
+gnn,non,transductive,wards,96.18,69.22,88.58,75.27,96.13 (95.63-96.60)
+gnn,non,transductive,caregivers,83.55,55.49,81.73,55.56,89.36 (88.62-89.98)
+gnn,non,inductive,all,84.23,55.61,81.30,55.95,89.67 (88.87-90.35)
+gnn,non,inductive,wards,82.74,55.46,82.86,55.24,91.23 (90.61-91.85)
+gnn,non,inductive,caregivers,84.89,55.34,78.40,55.79,87.90 (87.14-88.67)
+catboost,non,-,-,97.68,87.19,58.33,63.18,90.55 (89.94-91.27)
+random_forest,non,-,-,97.68,90.07,57.42,62.04,90.97 (90.27-91.59)
+knn,under,-,-,80.15,54.71,81.10,53.28,90.14 (89.35-90.83)
+logistic_regression,non,-,-,82.37,54.78,78.66,54.17,87.92 (87.17-88.70)
+all_ensemble_average,-,-,-,97.43,74.98,65.19,68.80,92.17 (91.68-92.72)
