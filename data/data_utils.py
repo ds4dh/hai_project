@@ -88,13 +88,11 @@ def main():
         add_gender_to_data()  # (274_323 x 21)
         add_colonisation_pressure_to_data()  # (274_323, 24); approx. 4 hours
         add_losh_to_data()  # (274_323 x 25)
-    
-    # DEBUG RETAB THIS TO IF LOOP
-    generate_features_and_labels()  # (274_323, 12) -> 267_106 non-colonised, 7_617 colonised
+        generate_features_and_labels()  # (274_323, 12) -> 267_106 non-colonised, 7_617 colonised
         
     # Save different data splittings for different balanced scenarios
     for balanced_cond in ['under', 'over', 'non']:
-        if 1:  # REGENERATE_DATASET_FROM_SCRATCH:
+        if REGENERATE_DATASET_FROM_SCRATCH:
             save_data_splits(balanced_cond)
         load_features_and_labels(balanced_cond)
 
